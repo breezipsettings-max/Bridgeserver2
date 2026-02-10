@@ -9,23 +9,29 @@ const server = http.createServer((req, res) => {
     res.end("Universal Bridge Chat: Online");
 });
 
-const wss = new WebSocket.Server({ server });
+const wss = new WebSocket.Server({ 
+    server,
+    clientTracking: true 
+});
 
 wss.on('connection', (ws) => {
+    // FORCE AUTO-GREEN: Send a packet immediately on connection
+    // This tells the Roblox executor the connection is solid right now.
+    ws.send("SYSTEM_CONNECTED");
+    
     console.log(`Player Connected. Total: ${wss.clients.size}`);
 
     ws.on('message', (data) => {
         const message = data.toString();
 
         wss.clients.forEach((client) => {
-            // Relay to everyone except the person who sent it
+            // High-speed relay
             if (client !== ws && client.readyState === WebSocket.OPEN) {
                 client.send(message);
             }
         });
     });
 
-    // Error handling to prevent server crashes
     ws.on('error', (err) => console.error("Socket Error:", err));
 
     ws.on('close', () => {
@@ -33,15 +39,15 @@ wss.on('connection', (ws) => {
     });
 });
 
-// Keep-alive: Pings clients every 30 seconds to keep the connection active
+// FAST HEARTBEAT: Reduced to 25s to stay ahead of Render's 30s timeout
 setInterval(() => {
     wss.clients.forEach((client) => {
         if (client.readyState === WebSocket.OPEN) {
             client.ping();
         }
     });
-}, 30000);
+}, 25000);
 
-server.listen(port, () => {
+server.listen(port, "0.0.0.0", () => {
     console.log(`Bridge listening on port ${port}`);
 });
