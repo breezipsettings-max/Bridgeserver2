@@ -1,34 +1,46 @@
 const WebSocket = require('ws');
 const http = require('http');
 
-// Use the port Render gives us, or default to 3000
 const port = process.env.PORT || 3000;
 
-// Create a basic server so Render stays happy
+// HTTP Health Check for Render
 const server = http.createServer((req, res) => {
     res.writeHead(200);
-    res.end("DefaultYourBot0 Bridge is Active");
+    res.end("Universal Bridge Chat: Online");
 });
 
 const wss = new WebSocket.Server({ server });
 
 wss.on('connection', (ws) => {
-    console.log("A player joined the bridge.");
+    console.log(`Player Connected. Total: ${wss.clients.size}`);
 
     ws.on('message', (data) => {
         const message = data.toString();
-        console.log("Relaying:", message);
 
-        // Send the message to every other connected player
         wss.clients.forEach((client) => {
+            // Relay to everyone except the person who sent it
             if (client !== ws && client.readyState === WebSocket.OPEN) {
                 client.send(message);
             }
         });
     });
 
-    ws.on('close', () => console.log("A player left the bridge."));
+    // Error handling to prevent server crashes
+    ws.on('error', (err) => console.error("Socket Error:", err));
+
+    ws.on('close', () => {
+        console.log(`Player Disconnected. Total: ${wss.clients.size}`);
+    });
 });
+
+// Keep-alive: Pings clients every 30 seconds to keep the connection active
+setInterval(() => {
+    wss.clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+            client.ping();
+        }
+    });
+}, 30000);
 
 server.listen(port, () => {
     console.log(`Bridge listening on port ${port}`);
