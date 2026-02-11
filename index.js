@@ -8,7 +8,6 @@ const PORT = process.env.PORT || 8080;
 
 app.use(express.json());
 
--- Pointing ONLY to the root domain as requested
 const ENGINE_URL = "https://deeplx-translator.onrender.com";
 const AUTH_TOKEN = "Translator";
 
