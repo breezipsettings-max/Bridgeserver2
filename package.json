@@ -1,11 +1,14 @@
 {
-  "name": "bridgeserver2",
+  "name": "roblox-bridge-v2",
   "version": "1.0.0",
+  "description": "WebSocket Bridge and DeepLX Translator for Roblox",
   "main": "index.js",
+  "dependencies": {
+    "axios": "^1.6.0",
+    "express": "^4.18.2",
+    "ws": "^8.14.2"
+  },
   "scripts": {
     "start": "node index.js"
-  },
-  "dependencies": {
-    "ws": "^8.18.0"
   }
 }
