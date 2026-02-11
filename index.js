@@ -1,47 +1,42 @@
 const WebSocket = require('ws');
 const http = require('http');
 
-const port = process.env.PORT || 3000;
+// Use the port Render or other hosts provide, or default to 8080
+const PORT = process.env.PORT || 8080;
 
-// HTTP Health Check for Render
+// Create a basic HTTP server so the WebSocket has something to attach to
 const server = http.createServer((req, res) => {
-    res.writeHead(200);
-    res.end("Universal Bridge Chat: Online");
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('Bridge Server is Running\n');
 });
 
 const wss = new WebSocket.Server({ server });
 
 wss.on('connection', (ws) => {
-    console.log(`Player Connected. Total: ${wss.clients.size}`);
+    console.log('New connection established');
 
     ws.on('message', (data) => {
+        // Convert the buffer to a string
         const message = data.toString();
+        console.log('Received:', message);
 
+        // Broadcast the message to EVERYONE connected
         wss.clients.forEach((client) => {
-            // Relay to everyone except the person who sent it
-            if (client !== ws && client.readyState === WebSocket.OPEN) {
+            if (client.readyState === WebSocket.OPEN) {
                 client.send(message);
             }
         });
     });
 
-    // Error handling to prevent server crashes
-    ws.on('error', (err) => console.error("Socket Error:", err));
-
     ws.on('close', () => {
-        console.log(`Player Disconnected. Total: ${wss.clients.size}`);
+        console.log('Connection closed');
+    });
+
+    ws.on('error', (err) => {
+        console.error('WS Error:', err);
     });
 });
 
-// Keep-alive: Pings clients every 30 seconds to keep the connection active
-setInterval(() => {
-    wss.clients.forEach((client) => {
-        if (client.readyState === WebSocket.OPEN) {
-            client.ping();
-        }
-    });
-}, 30000);
-
-server.listen(port, () => {
-    console.log(`Bridge listening on port ${port}`);
+server.listen(PORT, () => {
+    console.log(`Server is listening on port ${PORT}`);
 });
