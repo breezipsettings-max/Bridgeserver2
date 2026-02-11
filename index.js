@@ -8,59 +8,56 @@ const PORT = process.env.PORT || 8080;
 
 app.use(express.json());
 
-// This is the missing piece: The Translate Endpoint
+-- Translator Endpoint
 app.post('/translate', async (req, res) => {
-    const { text, source_lang, target_lang } = req.body;
+    const { text, target_lang } = req.body;
 
     if (!text || !target_lang) {
-        return res.status(400).json({ code: 400, message: "Missing text or target_lang" });
+        return res.status(400).json({ error: "Missing text or target_lang" });
     }
 
     try {
-        // We use the public DeepLX engine
+        -- Using a public DeepLX node (No API Key Required)
         const response = await axios.post('https://deeplx.owo.network/translate', {
             text: text,
-            source_lang: source_lang || "auto",
+            source_lang: "auto",
             target_lang: target_lang
         });
 
-        // Sending the exact format the Roblox script expects
         res.json({
             code: 200,
-            data: response.data.data, 
+            data: response.data.data,
             source_lang: response.data.source_lang
         });
-    } catch (error) {
-        console.error('Translation Engine Error:', error.message);
-        res.status(500).json({ code: 500, data: text, message: "Translation Failed" });
+    } catch (err) {
+        console.error("Translation Failed:", err.message);
+        res.status(500).json({ error: "Translation failed", original: text });
     }
 });
 
-// Basic status route
+-- Bridge logic (Status Page)
 app.get('/', (req, res) => {
-    res.send('Bridge & Translator Server is Running');
+    res.send('Bridge Server V2 + Translator is ONLINE');
 });
 
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
+-- WebSocket Bridge Logic
 wss.on('connection', (ws) => {
-    console.log('New connection established');
+    console.log('Roblox Client Connected');
 
     ws.on('message', (data) => {
         const message = data.toString();
-        console.log('Received:', message);
-
+        -- Broadcast to all other Roblox servers
         wss.clients.forEach((client) => {
             if (client.readyState === WebSocket.OPEN) {
                 client.send(message);
             }
         });
     });
-
-    ws.on('close', () => console.log('Connection closed'));
 });
 
 server.listen(PORT, () => {
-    console.log(`Server listening on port ${PORT}`);
+    console.log(`Server running on port ${PORT}`);
 });
