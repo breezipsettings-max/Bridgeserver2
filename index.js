@@ -1,26 +1,56 @@
 const WebSocket = require('ws');
 const http = require('http');
+const express = require('express');
+const axios = require('axios');
 
-// Use the port Render or other hosts provide, or default to 8080
+const app = express();
 const PORT = process.env.PORT || 8080;
 
-// Create a basic HTTP server so the WebSocket has something to attach to
-const server = http.createServer((req, res) => {
-    res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('Bridge Server is Running\n');
+app.use(express.json());
+
+// This is the missing piece: The Translate Endpoint
+app.post('/translate', async (req, res) => {
+    const { text, source_lang, target_lang } = req.body;
+
+    if (!text || !target_lang) {
+        return res.status(400).json({ code: 400, message: "Missing text or target_lang" });
+    }
+
+    try {
+        // We use the public DeepLX engine
+        const response = await axios.post('https://deeplx.owo.network/translate', {
+            text: text,
+            source_lang: source_lang || "auto",
+            target_lang: target_lang
+        });
+
+        // Sending the exact format the Roblox script expects
+        res.json({
+            code: 200,
+            data: response.data.data, 
+            source_lang: response.data.source_lang
+        });
+    } catch (error) {
+        console.error('Translation Engine Error:', error.message);
+        res.status(500).json({ code: 500, data: text, message: "Translation Failed" });
+    }
 });
 
+// Basic status route
+app.get('/', (req, res) => {
+    res.send('Bridge & Translator Server is Running');
+});
+
+const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
 wss.on('connection', (ws) => {
     console.log('New connection established');
 
     ws.on('message', (data) => {
-        // Convert the buffer to a string
         const message = data.toString();
         console.log('Received:', message);
 
-        // Broadcast the message to EVERYONE connected
         wss.clients.forEach((client) => {
             if (client.readyState === WebSocket.OPEN) {
                 client.send(message);
@@ -28,15 +58,9 @@ wss.on('connection', (ws) => {
         });
     });
 
-    ws.on('close', () => {
-        console.log('Connection closed');
-    });
-
-    ws.on('error', (err) => {
-        console.error('WS Error:', err);
-    });
+    ws.on('close', () => console.log('Connection closed'));
 });
 
 server.listen(PORT, () => {
-    console.log(`Server is listening on port ${PORT}`);
+    console.log(`Server listening on port ${PORT}`);
 });
