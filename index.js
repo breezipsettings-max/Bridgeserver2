@@ -17,15 +17,14 @@ wss.on('connection', (ws) => {
     ws.on('message', (data) => {
         const msg = data.toString();
 
-        // Handle JOIN 1
         if (msg.startsWith("JOIN:")) {
-            const newRoom = msg.split(":")[1];
-            ws.room = newRoom;
-            console.log(`User moved to channel: ${newRoom}`);
+            const parts = msg.split(":");
+            ws.room = parts[1];
+            ws.playerName = parts[2] || "Unknown";
+            console.log(`User moved to channel: ${ws.room}`);
             return;
         }
 
-        // Handle Online Users Request
         if (msg.startsWith("GET_ONLINE_USERS|")) {
             let onlineNames = [];
             wss.clients.forEach((client) => {
@@ -33,13 +32,12 @@ wss.on('connection', (ws) => {
                     onlineNames.push(client.playerName || "Unknown");
                 }
             });
-
             const response = "ONLINE_USERS_RESPONSE|" + (onlineNames.length > 0 ? onlineNames.join(", ") : "None");
             ws.send(response);
             return;
         }
 
-        // Obsidian Handshake BroadCast Logic
+        // 3. Obsidian Handshake Logic
         if (msg.includes("ObsidianHandshake")) {
             try {
                 const packet = JSON.parse(msg);
@@ -52,36 +50,24 @@ wss.on('connection', (ws) => {
                     }
                 });
             } catch (e) {
-                wss.clients.forEach((client) => {
-                    if (client !== ws && client.readyState === WebSocket.OPEN && client.room === ws.room) {
-                        client.send(msg);
-                    }
-                });
             }
-            return;
         }
 
-        // Global Sync Listener Block
+        // 4. Global Sync Listener
         if (msg.includes('"command":') || msg.includes('"hatName":')) {
             try {
                 const packet = JSON.parse(msg);
-                const KeywordSync = "DevHatSync";
-                
-                if (packet.keyword === KeywordSync) {
+                if (packet.keyword === "DevHatSync") {
                     wss.clients.forEach((client) => {
                         if (client !== ws && client.readyState === WebSocket.OPEN && client.room === ws.room) {
                             client.send(msg);
                         }
                     });
                 }
-                return;
             } catch (e) {
-                // Silently ignore malformed sync packets
             }
-            return;
         }
 
-        // Broadcast Logic 2 - Now at the end so it catches everything else!
         wss.clients.forEach((client) => {
             if (client.readyState === WebSocket.OPEN && client.room === ws.room) {
                 client.send(msg);
