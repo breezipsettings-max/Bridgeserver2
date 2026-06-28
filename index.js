@@ -39,13 +39,6 @@ wss.on('connection', (ws) => {
             return;
         }
 
-        // Broadcast Logic 2
-        wss.clients.forEach((client) => {
-            if (client.readyState === WebSocket.OPEN && client.room === ws.room) {
-                client.send(msg);
-            }
-        });
-
         // Obsidian Handshake BroadCast Logic
         if (msg.includes("ObsidianHandshake")) {
             try {
@@ -85,7 +78,15 @@ wss.on('connection', (ws) => {
             } catch (e) {
                 // Silently ignore malformed sync packets
             }
+            return;
         }
+
+        // Broadcast Logic 2 - Now at the end so it catches everything else!
+        wss.clients.forEach((client) => {
+            if (client.readyState === WebSocket.OPEN && client.room === ws.room) {
+                client.send(msg);
+            }
+        });
     });
 });
 
