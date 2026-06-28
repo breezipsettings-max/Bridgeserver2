@@ -18,7 +18,6 @@ wss.on('connection', (ws) => {
             const newRoom = msg.split(":")[1];
             ws.room = newRoom;
             console.log(`User moved to channel: ${newRoom}`);
-            return;
         }
         wss.clients.forEach((client) => {
             if (client.readyState === WebSocket.OPEN && client.room === ws.room) {
