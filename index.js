@@ -14,12 +14,14 @@ wss.on('connection', (ws) => {
     ws.on('message', (data) => {
         const msg = data.toString();
 
-        // Handle JOIN
+        // Handle JOIN (Now includes Role: CHAT or SYSTEM)
+        // Format: JOIN:RoomID:PlayerName:Role
         if (msg.startsWith("JOIN:")) {
             const parts = msg.split(":");
             ws.room = parts[1];
             ws.playerName = parts[2];
-            console.log(`${ws.playerName} joined: ${ws.room}`);
+            ws.role = parts[3] || "CHAT"; 
+            console.log(`${ws.playerName} joined: ${ws.room} as ${ws.role}`);
             return;
         }
 
@@ -27,35 +29,31 @@ wss.on('connection', (ws) => {
         if (msg.startsWith("GET_ONLINE_USERS|")) {
             let onlineNames = [];
             wss.clients.forEach((client) => {
-                if (client.readyState === WebSocket.OPEN) {
+                if (client.readyState === WebSocket.OPEN && client.room === ws.room) {
                     onlineNames.push(client.playerName || "Unknown");
                 }
             });
-            const response = "ONLINE_USERS_RESPONSE|" + (onlineNames.length > 0 ? onlineNames.join(", ") : "None");
-            ws.send(response);
+            ws.send("ONLINE_USERS_RESPONSE|" + (onlineNames.length > 0 ? onlineNames.join(", ") : "None"));
             return;
         }
 
-        // Handle Special Data Packets
-        if (msg.includes("ObsidianHandshake") || msg.includes('"keyword":"DevHatSync"')) {
-            // Process these separately in their specific blocks below
-        } else {
-            // THIS IS YOUR CHAT BROADCAST
-            // STRICT FILTER: Only broadcast if it has '|' and is NOT JSON/Special
-            if (msg.includes('|') && !msg.startsWith('{')) {
-                wss.clients.forEach((client) => {
-                    if (client !== ws && client.readyState === WebSocket.OPEN && client.room === ws.room) {
-                        client.send(msg);
-                    }
-                });
-            }
+        // 1. STRICT CHAT BROADCAST
+        // Only broadcast if it is NOT JSON, contains the '|' delimiter, AND the sender is a CHAT role
+        if (!msg.startsWith('{') && msg.includes('|') && ws.role === "CHAT") {
+            wss.clients.forEach((client) => {
+                if (client !== ws && client.readyState === WebSocket.OPEN && 
+                    client.room === ws.room && client.role === "CHAT") {
+                    client.send(msg);
+                }
+            });
         }
 
-        // Handshake Logic
+        // 2. ISOLATED HANDSHAKE LOGIC
         if (msg.includes("ObsidianHandshake")) {
             try {
                 const packet = JSON.parse(msg);
                 wss.clients.forEach((client) => {
+                    // Send to everyone in the room, regardless of role (or filter by role if needed)
                     if (client !== ws && client.readyState === WebSocket.OPEN && client.room === ws.room) {
                         client.send(JSON.stringify({
                             Type: "ObsidianHandshake",
@@ -67,7 +65,7 @@ wss.on('connection', (ws) => {
             return;
         }
 
-        // Global Sync Logic
+        // 3. ISOLATED SYNC LOGIC
         if (msg.includes('"keyword":"DevHatSync"')) {
             try {
                 const packet = JSON.parse(msg);
