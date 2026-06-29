@@ -10,7 +10,8 @@ app.get('/', (req, res) => res.send('Bridge Online'));
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-ws.on('message', (data) => {
+wss.on('connection', (ws) => {
+    ws.on('message', (data) => {
         const msg = data.toString();
 
         // Handle JOIN
