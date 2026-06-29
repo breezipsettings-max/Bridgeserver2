@@ -53,7 +53,7 @@ wss.on('connection', (ws) => {
             try {
                 const packet = JSON.parse(msg);
                 wss.clients.forEach((client) => {
-                    // Send to everyone in the room, regardless of role (or filter by role if needed)
+                    // Send to everyone in the room, regardless of role
                     if (client !== ws && client.readyState === WebSocket.OPEN && client.room === ws.room) {
                         client.send(JSON.stringify({
                             Type: "ObsidianHandshake",
