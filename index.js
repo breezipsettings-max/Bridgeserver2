@@ -41,12 +41,14 @@ wss.on('connection', (ws) => {
             // Process these separately in their specific blocks below
         } else {
             // THIS IS YOUR CHAT BROADCAST
-            // It only runs if the message is NOT a special data packet
-            wss.clients.forEach((client) => {
-                if (client !== ws && client.readyState === WebSocket.OPEN && client.room === ws.room) {
-                    client.send(msg);
-                }
-            });
+            // STRICT FILTER: Only broadcast if it has '|' and is NOT JSON/Special
+            if (msg.includes('|') && !msg.startsWith('{')) {
+                wss.clients.forEach((client) => {
+                    if (client !== ws && client.readyState === WebSocket.OPEN && client.room === ws.room) {
+                        client.send(msg);
+                    }
+                });
+            }
         }
 
         // Handshake Logic
