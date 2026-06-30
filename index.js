@@ -28,12 +28,15 @@ wss.on('connection', (ws) => {
             return;
         }
 
-        // Handle Online Users Request (Stays isolated within the sender's room channel)
+        // Handle Online Users Request (Tracks all connected users globally across all servers)
         if (msg.startsWith("GET_ONLINE_USERS|")) {
             let onlineNames = [];
             wss.clients.forEach((client) => {
-                if (client.readyState === WebSocket.OPEN && client.room === ws.room) {
-                    onlineNames.push(client.playerName || "Unknown");
+                if (client.readyState === WebSocket.OPEN) {
+                    let name = client.playerName || "Unknown";
+                    if (!onlineNames.includes(name)) {
+                        onlineNames.push(name);
+                    }
                 }
             });
             ws.send("ONLINE_USERS_RESPONSE|" + (onlineNames.length > 0 ? onlineNames.join(", ") : "None"));
