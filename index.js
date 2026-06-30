@@ -11,10 +11,13 @@ const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
 wss.on('connection', (ws) => {
+    // Set a safe default language room room upon initial connection
+    ws.room = 'EN';
+    
     ws.on('message', (data) => {
         const msg = data.toString();
 
-        // Handle JOIN (Now includes Role: CHAT or SYSTEM)
+        // Handle JOIN (Includes Role: CHAT or SYSTEM)
         // Format: JOIN:RoomID:PlayerName:Role
         if (msg.startsWith("JOIN:")) {
             const parts = msg.split(":");
@@ -25,7 +28,7 @@ wss.on('connection', (ws) => {
             return;
         }
 
-        // Handle Online Users Request
+        // Handle Online Users Request (Isolated to current room)
         if (msg.startsWith("GET_ONLINE_USERS|")) {
             let onlineNames = [];
             wss.clients.forEach((client) => {
@@ -34,17 +37,6 @@ wss.on('connection', (ws) => {
                 }
             });
             ws.send("ONLINE_USERS_RESPONSE|" + (onlineNames.length > 0 ? onlineNames.join(", ") : "None"));
-            return;
-        }
-
-        // 1. STRICT CHAT BROADCAST
-        // Only broadcast if it is NOT JSON AND the sender is a CHAT role
-        if (msg.startsWith("JOIN:")) {
-            const parts = msg.split(":");
-            ws.room = parts[1];
-            ws.playerName = parts[2];
-            ws.role = parts[3] || "CHAT"; 
-            console.log(`${ws.playerName} joined: ${ws.room} as ${ws.role}`);
             return;
         }
 
@@ -66,7 +58,6 @@ wss.on('connection', (ws) => {
             // Broadcast if we successfully found a UserId
             if (userId) {
                 wss.clients.forEach((client) => {
-                    // Send to everyone in the room, regardless of role
                     if (client !== ws && client.readyState === WebSocket.OPEN && client.room === ws.room) {
                         client.send(JSON.stringify({
                             Type: "ObsidianHandshake",
@@ -92,6 +83,14 @@ wss.on('connection', (ws) => {
             } catch (e) {}
             return;
         }
+
+        // 4. CHAT BROADCAST ENGINE (FALLBACK)
+        // Normal text strings that bypass the JSON modules above get distributed to the room here
+        wss.clients.forEach((client) => {
+            if (client.readyState === WebSocket.OPEN && client.room === ws.room) {
+                client.send(msg);
+            }
+        });
     });
 });
 
