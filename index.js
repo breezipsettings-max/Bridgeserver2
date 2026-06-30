@@ -50,18 +50,31 @@ wss.on('connection', (ws) => {
 
         // 2. ISOLATED HANDSHAKE LOGIC
         if (msg.includes("ObsidianHandshake")) {
+            let userId = null;
+            
             try {
                 const packet = JSON.parse(msg);
+                userId = packet.UserId;
+            } catch (e) {
+                // Fallback: Extract the digits using regex if JSON parsing fails
+                const match = msg.match(/\d+/);
+                if (match) {
+                    userId = match[0];
+                }
+            }
+
+            // Broadcast if we successfully found a UserId
+            if (userId) {
                 wss.clients.forEach((client) => {
                     // Send to everyone in the room, regardless of role
                     if (client !== ws && client.readyState === WebSocket.OPEN && client.room === ws.room) {
                         client.send(JSON.stringify({
                             Type: "ObsidianHandshake",
-                            UserId: packet.UserId
+                            UserId: userId
                         }));
                     }
                 });
-            } catch (e) {}
+            }
             return;
         }
 
