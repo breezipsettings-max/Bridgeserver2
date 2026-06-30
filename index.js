@@ -38,14 +38,14 @@ wss.on('connection', (ws) => {
         }
 
         // 1. STRICT CHAT BROADCAST
-        // Only broadcast if it is NOT JSON, contains the '|' delimiter, AND the sender is a CHAT role
-        if (!msg.startsWith('{') && msg.includes('|') && ws.role === "CHAT") {
-            wss.clients.forEach((client) => {
-                if (client !== ws && client.readyState === WebSocket.OPEN && 
-                    client.room === ws.room && client.role === "CHAT") {
-                    client.send(msg);
-                }
-            });
+        // Only broadcast if it is NOT JSON AND the sender is a CHAT role
+        if (msg.startsWith("JOIN:")) {
+            const parts = msg.split(":");
+            ws.room = parts[1];
+            ws.playerName = parts[2];
+            ws.role = parts[3] || "CHAT"; 
+            console.log(`${ws.playerName} joined: ${ws.room} as ${ws.role}`);
+            return;
         }
 
         // 2. ISOLATED HANDSHAKE LOGIC
