@@ -11,24 +11,24 @@ const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
 wss.on('connection', (ws) => {
-    // Set a safe default language room room upon initial connection
+    // Default fallback room assignment
     ws.room = 'EN';
     
     ws.on('message', (data) => {
         const msg = data.toString();
 
-        // Handle JOIN (Includes Role: CHAT or SYSTEM)
+        // Handle JOIN (Sets the room channel and roles for the socket)
         // Format: JOIN:RoomID:PlayerName:Role
         if (msg.startsWith("JOIN:")) {
             const parts = msg.split(":");
             ws.room = parts[1];
             ws.playerName = parts[2];
             ws.role = parts[3] || "CHAT"; 
-            console.log(`${ws.playerName} joined: ${ws.room} as ${ws.role}`);
+            console.log(`${ws.playerName} joined room: [${ws.room}] as ${ws.role}`);
             return;
         }
 
-        // Handle Online Users Request (Isolated to current room)
+        // Handle Online Users Request (Stays isolated within the sender's room channel)
         if (msg.startsWith("GET_ONLINE_USERS|")) {
             let onlineNames = [];
             wss.clients.forEach((client) => {
@@ -40,36 +40,34 @@ wss.on('connection', (ws) => {
             return;
         }
 
-        // 2. ISOLATED HANDSHAKE LOGIC
+        // ==========================================
+        // ISOLATED SYSTEM MODULE (SYSTEM_ONLY ROOM)
+        // ==========================================
+        
+        // 1. Obsidian Handshake Broadcast Logic
         if (msg.includes("ObsidianHandshake")) {
-            let userId = null;
-            
             try {
                 const packet = JSON.parse(msg);
-                userId = packet.UserId;
-            } catch (e) {
-                // Fallback: Extract the digits using regex if JSON parsing fails
-                const match = msg.match(/\d+/);
-                if (match) {
-                    userId = match[0];
-                }
-            }
-
-            // Broadcast if we successfully found a UserId
-            if (userId) {
                 wss.clients.forEach((client) => {
+                    // Only broadcasts to clients sharing the exact background system room
                     if (client !== ws && client.readyState === WebSocket.OPEN && client.room === ws.room) {
                         client.send(JSON.stringify({
                             Type: "ObsidianHandshake",
-                            UserId: userId
+                            UserId: packet.UserId
                         }));
+                    }
+                });
+            } catch (e) {
+                wss.clients.forEach((client) => {
+                    if (client !== ws && client.readyState === WebSocket.OPEN && client.room === ws.room) {
+                        client.send(msg);
                     }
                 });
             }
             return;
         }
 
-        // 3. ISOLATED SYNC LOGIC
+        // 2. Global Sync Listener
         if (msg.includes('"keyword":"DevHatSync"')) {
             try {
                 const packet = JSON.parse(msg);
@@ -80,12 +78,18 @@ wss.on('connection', (ws) => {
                         }
                     });
                 }
-            } catch (e) {}
-            return;
+                return;
+            } catch (e) {
+                // Silently ignore malformed sync packets
+                return;
+            }
         }
 
-        // 4. CHAT BROADCAST ENGINE (FALLBACK)
-        // Normal text strings that bypass the JSON modules above get distributed to the room here
+        // ==========================================
+        // STANDARD CHAT BROADCAST ENGINE (LOCAL ROOM)
+        // ==========================================
+        
+        // Normal chat messages drop down to here and distribute only within their active game.JobId room
         wss.clients.forEach((client) => {
             if (client.readyState === WebSocket.OPEN && client.room === ws.room) {
                 client.send(msg);
