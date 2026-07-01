@@ -18,7 +18,6 @@ wss.on('connection', (ws) => {
         const msg = data.toString();
 
         // Handle JOIN (Sets the room channel and roles for the socket)
-        // Format: JOIN:RoomID:PlayerName:Role
         if (msg.startsWith("JOIN:")) {
             const parts = msg.split(":");
             ws.room = parts[1];
@@ -29,7 +28,6 @@ wss.on('connection', (ws) => {
         }
 
         // Handle SYSTEM_SWITCH (Handles channel switching for Global/Server commands)
-        // Format: SYSTEM_SWITCH|NewRoom|PlayerName|UserId
         if (msg.startsWith("SYSTEM_SWITCH|")) {
             const parts = msg.split("|");
             const newRoom = parts[1];
@@ -47,6 +45,15 @@ wss.on('connection', (ws) => {
             return;
         }
 
+        // Handle PRIVATE ROOM Logic
+        if (msg.startsWith("JOIN_PRIVATE|")) {
+            const parts = msg.split("|");
+            ws.room = "Private_" + parts[1];
+            ws.send("SYSTEM_LOG|Joined private room: " + parts[1]);
+            console.log(`Player joined private room: [${ws.room}]`);
+            return;
+        }
+
         // Handle Global View Request
         if (msg === "GET_GLOBAL_USERS") {
             let globalUsers = [];
@@ -59,7 +66,7 @@ wss.on('connection', (ws) => {
             return;
         }
 
-        // Handle Online Users Request (Tracks all connected users globally across all servers)
+        // Handle Online Users Request
         if (msg.startsWith("GET_ONLINE_USERS|")) {
             let onlineNames = [];
             wss.clients.forEach((client) => {
@@ -78,12 +85,10 @@ wss.on('connection', (ws) => {
         // ISOLATED SYSTEM MODULE (SYSTEM_ONLY ROOM)
         // ==========================================
         
-        // 1. Obsidian Handshake Broadcast Logic
         if (msg.includes("ObsidianHandshake")) {
             try {
                 const packet = JSON.parse(msg);
                 wss.clients.forEach((client) => {
-                    // Only broadcasts to clients sharing the exact background system room
                     if (client !== ws && client.readyState === WebSocket.OPEN && client.room === ws.room) {
                         client.send(JSON.stringify({
                             Type: "ObsidianHandshake",
@@ -101,7 +106,6 @@ wss.on('connection', (ws) => {
             return;
         }
 
-        // 2. Global Sync Listener
         if (msg.includes('"keyword":"DevHatSync"')) {
             try {
                 const packet = JSON.parse(msg);
@@ -114,7 +118,6 @@ wss.on('connection', (ws) => {
                 }
                 return;
             } catch (e) {
-                // Silently ignore malformed sync packets
                 return;
             }
         }
@@ -123,7 +126,6 @@ wss.on('connection', (ws) => {
         // STANDARD CHAT BROADCAST ENGINE (LOCAL ROOM)
         // ==========================================
         
-        // Normal chat messages drop down to here and distribute only within their active game.JobId room
         wss.clients.forEach((client) => {
             if (client.readyState === WebSocket.OPEN && client.room === ws.room) {
                 client.send(msg);
