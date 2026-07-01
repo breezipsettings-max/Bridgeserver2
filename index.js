@@ -54,6 +54,15 @@ wss.on('connection', (ws) => {
             return;
         }
 
+        // Handle CREATE_PRIVATE Logic
+        if (msg.startsWith("CREATE_PRIVATE|")) {
+            const playerName = msg.split("|")[1];
+            ws.room = "Private_" + playerName;
+            ws.send("SYSTEM_LOG|Created and joined private room: " + playerName);
+            console.log(`${playerName} created private room: [${ws.room}]`);
+            return;
+        }
+
         // Handle Global View Request
         if (msg === "GET_GLOBAL_USERS") {
             let globalUsers = [];
