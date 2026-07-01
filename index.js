@@ -63,6 +63,16 @@ wss.on('connection', (ws) => {
             return;
         }
 
+        // Handle SECRET Broadcast
+        if (msg.startsWith("SECRET|")) {
+            wss.clients.forEach((client) => {
+                if (client.readyState === WebSocket.OPEN && client.room === ws.room) {
+                    client.send(msg);
+                }
+            });
+            return;
+        }
+
         // Handle Global View Request
         if (msg === "GET_GLOBAL_USERS") {
             let globalUsers = [];
