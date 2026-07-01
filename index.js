@@ -63,6 +63,13 @@ wss.on('connection', (ws) => {
             return;
         }
 
+        // Handle GLOBAL_SET_LIMIT Logic
+        if (msg.startsWith("GLOBAL_SET_LIMIT|")) {
+            const limit = msg.split("|")[1];
+            console.log(`Global limit set to: ${limit}`);
+            return;
+        }
+
         // Handle SECRET Broadcast
         if (msg.startsWith("SECRET|")) {
             wss.clients.forEach((client) => {
