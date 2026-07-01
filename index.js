@@ -47,6 +47,18 @@ wss.on('connection', (ws) => {
             return;
         }
 
+        // Handle Global View Request
+        if (msg === "GET_GLOBAL_USERS") {
+            let globalUsers = [];
+            wss.clients.forEach((client) => {
+                if (client.readyState === WebSocket.OPEN && client.room === "Global") {
+                    globalUsers.push(client.playerName);
+                }
+            });
+            ws.send("GLOBAL_USERS_LIST|" + globalUsers.join(","));
+            return;
+        }
+
         // Handle Online Users Request (Tracks all connected users globally across all servers)
         if (msg.startsWith("GET_ONLINE_USERS|")) {
             let onlineNames = [];
