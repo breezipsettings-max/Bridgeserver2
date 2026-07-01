@@ -28,6 +28,15 @@ wss.on('connection', (ws) => {
             return;
         }
 
+        // Handle SYSTEM_SWITCH (Handles channel switching for Global/Server commands)
+        // Format: SYSTEM_SWITCH|NewRoom|PlayerName
+        if (msg.startsWith("SYSTEM_SWITCH|")) {
+            const parts = msg.split("|");
+            ws.room = parts[1];
+            console.log(`${parts[2]} switched to channel: [${ws.room}]`);
+            return;
+        }
+
         // Handle Online Users Request (Tracks all connected users globally across all servers)
         if (msg.startsWith("GET_ONLINE_USERS|")) {
             let onlineNames = [];
