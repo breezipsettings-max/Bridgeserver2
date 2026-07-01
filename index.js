@@ -29,11 +29,21 @@ wss.on('connection', (ws) => {
         }
 
         // Handle SYSTEM_SWITCH (Handles channel switching for Global/Server commands)
-        // Format: SYSTEM_SWITCH|NewRoom|PlayerName
+        // Format: SYSTEM_SWITCH|NewRoom|PlayerName|UserId
         if (msg.startsWith("SYSTEM_SWITCH|")) {
             const parts = msg.split("|");
-            ws.room = parts[1];
-            console.log(`${parts[2]} switched to channel: [${ws.room}]`);
+            const newRoom = parts[1];
+            const playerName = parts[2];
+            const userId = parseInt(parts[3]);
+            const OR_ID = 9271966310;
+
+            if (newRoom === "Global" && userId !== OR_ID) {
+                console.log(`${playerName} tried to access Global but is not the owner.`);
+                return;
+            }
+
+            ws.room = newRoom;
+            console.log(`${playerName} switched to channel: [${ws.room}]`);
             return;
         }
 
