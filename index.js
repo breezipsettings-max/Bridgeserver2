@@ -78,8 +78,11 @@ wss.on('connection', (ws) => {
         if (msg === "GET_GLOBAL_USERS") {
             let globalUsers = [];
             wss.clients.forEach((client) => {
+                // Updated: Logic now captures all users who have joined the "Global" room
                 if (client.readyState === WebSocket.OPEN && client.room === "Global") {
-                    globalUsers.push(client.playerName);
+                    if (client.playerName) {
+                        globalUsers.push(client.playerName);
+                    }
                 }
             });
             ws.send("GLOBAL_USERS_LIST|" + globalUsers.join(","));
