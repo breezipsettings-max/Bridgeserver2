@@ -32,14 +32,8 @@ wss.on('connection', (ws) => {
             const parts = msg.split("|");
             const newRoom = parts[1];
             const playerName = parts[2];
-            const userId = parseInt(parts[3]);
-            const OR_ID = 9271966310;
-
-            if (newRoom === "Global" && userId !== OR_ID) {
-                console.log(`${playerName} tried to access Global but is not the owner.`);
-                return;
-            }
-
+            
+            // REMOVED: Ownership restriction check for Global room
             ws.room = newRoom;
             console.log(`${playerName} switched to channel: [${ws.room}]`);
             return;
