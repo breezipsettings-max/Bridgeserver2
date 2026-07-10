@@ -150,7 +150,7 @@ wss.on('connection', (ws) => {
         // ==========================================
         
         wss.clients.forEach((client) => {
-            if (client.readyState === WebSocket.OPEN && client.room === ws.room) {
+            if (client.readyState === WebSocket.OPEN && client.room === ws.room && ws.room !== "SYSTEM_ONLY") {
                 client.send(msg);
             }
         });
