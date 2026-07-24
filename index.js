@@ -108,14 +108,15 @@ wss.on('connection', (ws) => {
         // ISOLATED SYSTEM MODULE (SYSTEM_ONLY ROOM)
         // ==========================================
         
-        if (msg.includes("ObsidianHandshake")) {
+          if (msg.includes("ObsidianHandshake")) {
             try {
                 const packet = JSON.parse(msg);
                 wss.clients.forEach((client) => {
                     if (client !== ws && client.readyState === WebSocket.OPEN && client.room === ws.room) {
                         client.send(JSON.stringify({
                             Type: "ObsidianHandshake",
-                            UserId: packet.UserId
+                            UserId: packet.UserId,
+                            PlayerName: ws.playerName
                         }));
                     }
                 });
