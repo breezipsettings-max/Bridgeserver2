@@ -116,7 +116,7 @@ wss.on('connection', (ws) => {
                         client.send(JSON.stringify({
                             Type: "ObsidianHandshake",
                             UserId: packet.UserId,
-                            PlayerName: ws.playerName
+                            PlayerName: ws.playerName,
                             Platform: packet.Platform
                         }));
                     }
