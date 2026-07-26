@@ -117,6 +117,7 @@ wss.on('connection', (ws) => {
                             Type: "ObsidianHandshake",
                             UserId: packet.UserId,
                             PlayerName: ws.playerName
+                            Platform: packet.Platform
                         }));
                     }
                 });
