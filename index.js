@@ -10,6 +10,9 @@ app.get('/', (req, res) => res.send('Bridge Online'));
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
+// Server-side cache for user platform tracking
+const HandshakePlatformCache = {};
+
 wss.on('connection', (ws) => {
     // Default fallback room assignment
     ws.room = 'EN';
@@ -33,7 +36,6 @@ wss.on('connection', (ws) => {
             const newRoom = parts[1];
             const playerName = parts[2];
             
-            // REMOVED: Ownership restriction check for Global room
             ws.room = newRoom;
             console.log(`${playerName} switched to channel: [${ws.room}]`);
             return;
@@ -78,7 +80,6 @@ wss.on('connection', (ws) => {
         if (msg === "GET_GLOBAL_USERS") {
             let globalUsers = [];
             wss.clients.forEach((client) => {
-                // Updated: Logic now captures all users who have joined the "Global" room
                 if (client.readyState === WebSocket.OPEN && client.room === "Global") {
                     if (client.playerName) {
                         globalUsers.push(client.playerName);
@@ -108,9 +109,15 @@ wss.on('connection', (ws) => {
         // ISOLATED SYSTEM MODULE (SYSTEM_ONLY ROOM)
         // ==========================================
         
-          if (msg.includes("ObsidianHandshake")) {
+        if (msg.includes("ObsidianHandshake")) {
             try {
                 const packet = JSON.parse(msg);
+
+                // Save to server platform cache
+                if (packet.UserId && packet.Platform) {
+                    HandshakePlatformCache[packet.UserId] = packet.Platform;
+                }
+
                 wss.clients.forEach((client) => {
                     if (client !== ws && client.readyState === WebSocket.OPEN && client.room === ws.room) {
                         client.send(JSON.stringify({
