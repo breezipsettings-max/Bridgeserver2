@@ -26,10 +26,16 @@ function escapeHtml(str) {
 }
 
 // Helper function to send Telegram alerts using HTML parsing
-async function sendTelegramAlert(text) {
+async function sendTelegramAlert(text, clientWs = null) {
     try {
         if (!TelegramChatId || TelegramChatId === "5308116981") {
             console.error("Telegram Chat ID not configured.");
+            if (clientWs && clientWs.readyState === WebSocket.OPEN) {
+                clientWs.send(JSON.stringify({
+                    Type: "TelegramError",
+                    ErrorDescription: "Telegram Chat ID configuration invalid."
+                }));
+            }
             return;
         }
 
@@ -49,11 +55,73 @@ async function sendTelegramAlert(text) {
         const data = await response.json();
         if (!data.ok) {
             console.error("Telegram Error:", data.description);
+            if (clientWs && clientWs.readyState === WebSocket.OPEN) {
+                clientWs.send(JSON.stringify({
+                    Type: "TelegramError",
+                    ErrorDescription: data.description || "Telegram API rejected message"
+                }));
+            }
         }
     } catch (err) {
         console.error("Telegram Transport Error:", err);
+        if (clientWs && clientWs.readyState === WebSocket.OPEN) {
+            clientWs.send(JSON.stringify({
+                Type: "TelegramError",
+                ErrorDescription: "Failed to communicate with Telegram servers"
+            }));
+        }
     }
 }
+
+// Telegram Inbound Command Polling Engine
+let lastUpdateId = 0;
+
+async function pollTelegramUpdates() {
+    try {
+        const url = `https://api.telegram.org/bot${TelegramToken}/getUpdates?offset=${lastUpdateId + 1}&timeout=30`;
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (data.ok && Array.isArray(data.result) && data.result.length > 0) {
+            for (const update of data.result) {
+                lastUpdateId = update.update_id;
+
+                if (update.message && update.message.text) {
+                    const text = update.message.text;
+                    const senderName = update.message.from ? (update.message.from.first_name || "Telegram User") : "Telegram User";
+
+                    // Command Handler for Broadcasts sent from Telegram group to Roblox
+                    if (text.startsWith("/announcement") || text.startsWith("/broadcast")) {
+                        const cleanMsg = text.replace(/^\/(announcement|broadcast)(@\w+)?\s*/i, "").trim();
+                        
+                        if (cleanMsg.length > 0) {
+                            const broadcastPayload = JSON.stringify({
+                                Type: "ObsidianBroadcast",
+                                Title: "Telegram Announcement",
+                                Message: cleanMsg,
+                                Sender: senderName
+                            });
+
+                            wss.clients.forEach((client) => {
+                                if (client.readyState === WebSocket.OPEN) {
+                                    client.send(broadcastPayload);
+                                }
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    } catch (err) {
+        console.error("Telegram Polling Error:", err);
+    }
+
+    // Schedule next polling cycle
+    setTimeout(pollTelegramUpdates, 2000);
+}
+
+// Start polling for Telegram group commands
+pollTelegramUpdates();
 
 // Server-side cache for user platform tracking
 const HandshakePlatformCache = {};
@@ -198,7 +266,7 @@ wss.on('connection', (ws) => {
                                             `<b>User ID:</b> <code>${userId}</code>\n` +
                                             `<b>Suggestion:</b> ${escapeHtml(suggestionText)}`;
 
-                    sendTelegramAlert(telegramMessage);
+                    sendTelegramAlert(telegramMessage, ws);
                 }
             } catch (e) {
                 console.error('Suggest parse error:', e);
@@ -219,7 +287,7 @@ wss.on('connection', (ws) => {
                                            `<b>User ID:</b> <code>${requesterId}</code>\n` +
                                            `<b>Attempted Command:</b> <code>${escapeHtml(attemptedCommand)}</code>`;
 
-                    sendTelegramAlert(warningMessage);
+                    sendTelegramAlert(warningMessage, ws);
                     return;
                 }
 
