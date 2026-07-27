@@ -1,6 +1,5 @@
 const WebSocket = require('ws');
 const http = require('http');
-const https = require('https');
 const express = require('express');
 
 const app = express();
@@ -14,48 +13,42 @@ const wss = new WebSocket.Server({ server });
 // Owner Verification
 const OwnerUserId = 9271966310;
 
-// Discord Bot Token & Channel Configuration
-const DT1 = "MTUzMTEyNzgyMTIyNzc5MDM4OA.GBOOXz.LK-WUEE7xwf4nEop-UYf6VL3i5jAix0mtjPJeo";
-const D3CID = "1531104786508939445";
-const DiscordToken = DT1;
-const DiscordChannelId = D3CID;
+// Telegram Bot Configuration
+const TelegramToken = "8890131325:AAG2SAW8cG1x8yH2U-uyHfPtrmsyNpcvb9w";
+const TelegramChatId = "-5308116981";
 
-// Server-side cache for user platform tracking
-const HandshakePlatformCache = {};
-
-// Helper function to send Discord Message via Bot API safely
-async function sendDiscordWebhook(payloadData, onResponse) {
+// Helper function to send Telegram alerts
+async function sendTelegramAlert(text) {
     try {
-        if (!DiscordToken) {
-            console.error("Discord Token not provided.");
-            if (onResponse) onResponse(false, "Invalid Discord Token");
+        if (!TelegramChatId || TelegramChatId === "YOUR_CHAT_ID_HERE") {
+            console.error("Telegram Chat ID not configured.");
             return;
         }
 
-        const apiUrl = `https://discord.com/api/v10/channels/${DiscordChannelId}/messages`;
-
-        const response = await fetch(apiUrl, {
+        const url = `https://api.telegram.org/bot${TelegramToken}/sendMessage`;
+        const response = await fetch(url, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bot ${DiscordToken}`,
-                'User-Agent': 'ObsidianBridgeBot/1.0 (Node.js)'
+                'Content-Type': 'application/json'
             },
-            body: JSON.stringify(payloadData)
+            body: JSON.stringify({
+                chat_id: TelegramChatId,
+                text: text,
+                parse_mode: 'Markdown'
+            })
         });
 
-        if (response.status === 200 || response.status === 201 || response.ok) {
-            if (onResponse) onResponse(true, "sent");
-        } else {
-            const errorText = await response.text();
-            console.error(`Discord Reject [HTTP ${response.status}]:`, errorText);
-            if (onResponse) onResponse(false, response.status);
+        const data = await response.json();
+        if (!data.ok) {
+            console.error("Telegram Error:", data.description);
         }
     } catch (err) {
-        console.error("Webhook Execution Transport Error:", err);
-        if (onResponse) onResponse(false, err.message);
+        console.error("Telegram Transport Error:", err);
     }
 }
+
+// Server-side cache for user platform tracking
+const HandshakePlatformCache = {};
 
 wss.on('connection', (ws) => {
     // Default fallback room assignment
@@ -189,46 +182,15 @@ wss.on('connection', (ws) => {
                 const packet = JSON.parse(msg);
                 if (packet.Type === "ObsidianSuggest" || packet.Suggest) {
                     const suggestionText = packet.Suggest || packet.Message;
-                    
                     const playerName = packet.PlayerName || ws.playerName || "Unknown";
                     const userId = packet.UserId || ws.userId || "Unknown";
 
-                    const webhookPayload = {
-                        content: "",
-                        embeds: [
-                            {
-                                title: "New Suggestion Received",
-                                description: String(suggestionText),
-                                color: 16766720,
-                                fields: [
-                                    {
-                                        name: "Roblox Player",
-                                        value: String(playerName),
-                                        inline: true
-                                    },
-                                    {
-                                        name: "Roblox User ID",
-                                        value: String(userId),
-                                        inline: true
-                                    }
-                                ]
-                            }
-                        ]
-                    };
+                    const telegramMessage = `💡 *New Suggestion Received*\n\n` +
+                                            `*Player:* ${playerName}\n` +
+                                            `*User ID:* ${userId}\n` +
+                                            `*Suggestion:* ${suggestionText}`;
 
-                    sendDiscordWebhook(webhookPayload, (success, resp) => {
-                        if (success) {
-                            ws.send(JSON.stringify({
-                                Type: "SuggestionSuccess",
-                                response: "sent"
-                            }));
-                        } else {
-                            ws.send(JSON.stringify({
-                                Type: "SuggestionFailed",
-                                response: resp
-                            }));
-                        }
-                    });
+                    sendTelegramAlert(telegramMessage);
                 }
             } catch (e) {
                 console.error('Suggest parse error:', e);
@@ -244,35 +206,12 @@ wss.on('connection', (ws) => {
                 const attemptedCommand = packet.Command || packet.Message || "Unknown Command";
 
                 if (requesterId !== OwnerUserId) {
-                    const warningPayload = {
-                        content: "",
-                        embeds: [
-                            {
-                                title: "⚠️ Unauthorized Owner Command Attempt",
-                                description: "A non-owner user attempted to execute a restricted command.",
-                                color: 16711680,
-                                fields: [
-                                    {
-                                        name: "Roblox Player",
-                                        value: String(playerName),
-                                        inline: true
-                                    },
-                                    {
-                                        name: "Roblox User ID",
-                                        value: String(requesterId),
-                                        inline: true
-                                    },
-                                    {
-                                        name: "Attempted Command",
-                                        value: String(attemptedCommand),
-                                        inline: false
-                                    }
-                                ]
-                            }
-                        ]
-                    };
+                    const warningMessage = `⚠️ *Unauthorized Owner Command Attempt*\n\n` +
+                                           `*Player:* ${playerName}\n` +
+                                           `*User ID:* ${requesterId}\n` +
+                                           `*Attempted Command:* ${attemptedCommand}`;
 
-                    sendDiscordWebhook(warningPayload);
+                    sendTelegramAlert(warningMessage);
                     return;
                 }
 
