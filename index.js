@@ -61,46 +61,66 @@ async function sendTelegramNotification(htmlMessage) {
     }
 }
 
-// Express route for incoming Telegram updates
-app.post('/getUpdates', (req, res) => {
-    const update = req.body;
-    const message = update.message || (update.result && update.result.message);
+// Telegram Polling Function (Fetches updates directly from Telegram getUpdates API)
+async function pollTelegramUpdates() {
+    try {
+        const url = `https://api.telegram.org/bot${TelegramToken}/getUpdates?offset=${telegramOffset}&timeout=10`;
+        const response = await fetch(url);
+        const data = await response.json();
 
-    if (message && message.text) {
-        const firstName = message.from.first_name || "Admin";
-        const lastName = message.from.last_name || "";
-        const senderName = `${firstName} ${lastName}`.trim();
-        const senderUserId = message.from.id;
-        const telegramText = message.text;
+        if (data.ok && data.result && data.result.length > 0) {
+            for (const update of data.result) {
+                // Update offset to mark this update as processed
+                telegramOffset = update.update_id + 1;
 
-        let commandName = "";
-        let commandPayload = telegramText;
+                const message = update.message || (update.result && update.result.message);
 
-        if (telegramText.startsWith("/")) {
-            const parts = telegramText.split(" ");
-            let cmdPart = parts[0];
-            if (cmdPart.includes("@")) {
-                cmdPart = cmdPart.split("@")[0];
+                if (message && message.text) {
+                    const firstName = message.from.first_name || "Admin";
+                    const lastName = message.from.last_name || "";
+                    const senderName = `${firstName} ${lastName}`.trim();
+                    const senderUserId = message.from.id;
+                    const telegramText = message.text;
+
+                    console.log(`Received from Telegram Polling (${senderName}): ${telegramText}`);
+
+                    let commandName = "";
+                    let commandPayload = telegramText;
+
+                    if (telegramText.startsWith("/")) {
+                        const parts = telegramText.split(" ");
+                        let cmdPart = parts[0];
+                        if (cmdPart.includes("@")) {
+                            cmdPart = cmdPart.split("@")[0];
+                        }
+                        commandName = cmdPart.substring(1).toLowerCase();
+                        commandPayload = parts.slice(1).join(" ");
+                    }
+
+                    const broadcastPayload = JSON.stringify({
+                        Type: "TelegramCommand",
+                        Command: commandName,
+                        Sender: senderName,
+                        UserId: senderUserId,
+                        Message: telegramText,
+                        Payload: commandPayload
+                    });
+
+                    wss.clients.forEach((client) => {
+                        if (client.readyState === WebSocket.OPEN) {
+                            client.send(broadcastPayload);
+                        }
+                    });
+                }
             }
-            commandName = cmdPart.substring(1).toLowerCase();
-            commandPayload = parts.slice(1).join(" ");
         }
-
-        const broadcastPayload = JSON.stringify({
-            Type: "TelegramBroadcast",
-            Command: commandName,
-            Sender: senderName,
-            UserId: senderUserId,
-            Message: telegramText,
-            Payload: commandPayload
-        });
-
-        wss.clients.forEach((client) => {
-            if (client.readyState === WebSocket.OPEN) {
-                client.send(broadcastPayload);
-            }
-        });
+    } catch (err) {
+        console.error("Telegram Polling Error:", err.message);
     }
+}
+
+// Start polling Telegram every 3 seconds
+setInterval(pollTelegramUpdates, 3000);
 
 wss.on('connection', (ws) => {
     // Default fallback room assignment
