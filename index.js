@@ -234,15 +234,6 @@ wss.on('connection', (ws) => {
             return;
         }
 
-        wss.clients.forEach((client) => {
-            if (client.readyState === WebSocket.OPEN && client.room === ws.room) {
-                client.send(msg);
-            }
-        });
-    });
-});
-
-
         // Handle Owner Actions / Verified Owner Commands
         if (msg.includes("ObsidianOwnerAction") || msg.includes("ObsidianOwnerCommand")) {
             try {
