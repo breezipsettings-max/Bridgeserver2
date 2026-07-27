@@ -22,6 +22,9 @@ const OwnerUserId = 9271966310;
 // Server-side cache for user platform tracking
 const HandshakePlatformCache = {};
 
+// Track Telegram update offset for polling
+let telegramOffset = 0;
+
 function escapeHTML(str) {
     if (!str) return '';
     return String(str)
@@ -61,7 +64,7 @@ async function sendTelegramNotification(htmlMessage) {
     }
 }
 
-// Telegram Polling Function (Fetches updates directly from Telegram getUpdates API)
+// Telegram Polling Function with Targeted Parsing for /replytosuggest
 async function pollTelegramUpdates() {
     try {
         const url = `https://api.telegram.org/bot${TelegramToken}/getUpdates?offset=${telegramOffset}&timeout=10`;
@@ -97,13 +100,24 @@ async function pollTelegramUpdates() {
                         commandPayload = parts.slice(1).join(" ");
                     }
 
+                    let targetUser = "";
+                    let replyText = commandPayload;
+
+                    if (commandName === "replytosuggest") {
+                        const payloadParts = commandPayload.trim().split(" ");
+                        targetUser = payloadParts[0] || "";
+                        replyText = payloadParts.slice(1).join(" ") || "";
+                    }
+
                     const broadcastPayload = JSON.stringify({
                         Type: "TelegramCommand",
                         Command: commandName,
                         Sender: senderName,
                         UserId: senderUserId,
                         Message: telegramText,
-                        Payload: commandPayload
+                        Payload: commandPayload,
+                        TargetUser: targetUser,
+                        ReplyText: replyText
                     });
 
                     wss.clients.forEach((client) => {
@@ -277,7 +291,6 @@ wss.on('connection', (ws) => {
                 if (packet.UserId === OwnerUserId || ws.userId === OwnerUserId) {
                     const attemptedCommand = packet.Command || packet.Payload;
                     
-                    // Dispatch Telegram Notification for Owner Action/Announcement
                     const safeName = escapeHTML(packet.PlayerName || ws.playerName || 'Owner');
                     const safeUserId = escapeHTML(String(packet.UserId || ws.userId || OwnerUserId));
                     const messageText = attemptedCommand || packet.Message || "No content provided";
