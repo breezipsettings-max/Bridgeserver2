@@ -63,8 +63,6 @@ async function sendTelegramNotification(htmlMessage) {
         console.error("Telegram Dispatch Error:", err.message);
     }
 }
-
-// Telegram Webhook Endpoint with Targeted Parsing for /replytosuggest
 app.post('/telegram-webhook', (req, res) => {
     const update = req.body;
 
@@ -76,7 +74,7 @@ app.post('/telegram-webhook', (req, res) => {
         const senderUserId = message.from.id;
         const telegramText = message.text;
 
-        console.log(`Received from Telegram Webhook (${senderName}): ${telegramText}`);
+        console.log(`Received from Telegram (${senderName}): ${telegramText}`);
 
         let commandName = "";
         let commandPayload = telegramText;
@@ -248,21 +246,53 @@ wss.on('connection', (ws) => {
             return;
         }
         
-        if (msg.includes("TelegramBroadcast") || msg.includes("ObsidianSuggest")) {
+         if (msg.includes("TelegramBroadcast") || msg.includes("ObsidianSuggest")) {
             try {
                 const packet = typeof msg === 'string' ? JSON.parse(msg) : msg;
                 const messageText = packet.Message || packet.Suggestion || "No message content provided";
 
-                const safeName = escapeHTML(packet.PlayerName || ws.playerName || 'Unknown');
+                const rawName = packet.PlayerName || ws.playerName || 'Unknown';
+                const safeName = escapeHTML(rawName);
                 const safeUserId = escapeHTML(String(packet.UserId || ws.userId || 'N/A'));
                 const safeMessage = escapeHTML(messageText);
 
                 const telegramFormattedText = 
-                    `💡 <b>NEW TELEGRAM BROADCAST</b>\n` +
+                    `💡 <b>NEW TELEGRAM BROADCAST / SUGGESTION</b>\n` +
                     `👤 <b>User:</b> ${safeName} (ID: <code>${safeUserId}</code>)\n` +
                     `📝 <b>Message:</b> ${safeMessage}`;
 
-                sendTelegramNotification(telegramFormattedText);
+                // Inline keyboard button that pre-fills the reply command in Telegram
+                const replyMarkup = {
+                    inline_keyboard: [
+                        [
+                            {
+                                text: "💬 Reply to Suggestion",
+                                switch_inline_query_current_chat: `/replytosuggest@Obsidian_WardenBot ${rawName} `
+                            }
+                        ]
+                    ]
+                };
+
+                // Send message with inline button via Telegram API
+                if (TelegramToken && TelegramChatId) {
+                    const chatId = TelegramChatId.trim();
+                    const postData = JSON.stringify({
+                        chat_id: chatId,
+                        text: telegramFormattedText,
+                        parse_mode: 'HTML',
+                        reply_markup: replyMarkup
+                    });
+
+                    const url = `https://api.telegram.org/bot${TelegramToken}/sendMessage`;
+
+                    if (typeof fetch !== 'undefined') {
+                        fetch(url, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: postData
+                        }).catch((err) => console.error("Telegram Notification Error:", err.message));
+                    }
+                }
             } catch (e) {
                 console.error("Message Parse Error:", e.message);
             }
