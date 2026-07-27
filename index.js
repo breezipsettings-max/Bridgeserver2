@@ -36,42 +36,28 @@ async function sendTelegramNotification(htmlMessage, replyMarkup = null) {
     }
 
     const chatId = TelegramChatId.trim();
-    const url = `https://api.telegram.org/bot${TelegramToken}/sendMessage`;
-    
-    const payload = {
-        chat_id: chatId,
-        text: htmlMessage,
-        parse_mode: 'HTML'
-    };
+    let url = `https://api.telegram.org/bot${TelegramToken}/sendMessage?chat_id=${chatId}&text=${encodeURIComponent(htmlMessage)}&parse_mode=HTML`;
 
     if (replyMarkup) {
-        payload.reply_markup = replyMarkup;
+        url += `&reply_markup=${encodeURIComponent(JSON.stringify(replyMarkup))}`;
     }
 
     try {
         if (typeof fetch !== 'undefined') {
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
+            const response = await fetch(url, { method: 'POST' });
             const data = await response.json();
             console.log("Telegram Response:", data);
 
             if (!data.ok) {
                 console.error("Telegram API Error Details:", data);
                 const plainMessage = htmlMessage.replace(/<[^>]*>?/gm, '');
-                const fallbackPayload = {
-                    chat_id: chatId,
-                    text: plainMessage
-                };
-                if (replyMarkup) fallbackPayload.reply_markup = replyMarkup;
+                let fallbackUrl = `https://api.telegram.org/bot${TelegramToken}/sendMessage?chat_id=${chatId}&text=${encodeURIComponent(plainMessage)}`;
+                
+                if (replyMarkup) {
+                    fallbackUrl += `&reply_markup=${encodeURIComponent(JSON.stringify(replyMarkup))}`;
+                }
 
-                const fallbackResponse = await fetch(url, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(fallbackPayload)
-                });
+                const fallbackResponse = await fetch(fallbackUrl, { method: 'POST' });
                 const fallbackData = await fallbackResponse.json();
                 console.log("Telegram Fallback Response:", fallbackData);
             }
