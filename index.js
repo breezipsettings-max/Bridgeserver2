@@ -1,5 +1,6 @@
 const WebSocket = require('ws');
 const http = require('http');
+const https = require('https');
 const express = require('express');
 
 const app = express();
@@ -17,114 +18,59 @@ const OwnerUserId = 9271966310;
 const TelegramToken = "8890131325:AAG2SAW8cG1x8yH2U-uyHfPtrmsyNpcvb9w";
 const TelegramChatId = "-5308116981";
 
-// Helper function to escape HTML special characters for Telegram
-function escapeHtml(str) {
+// Server-side cache for user platform tracking
+const HandshakePlatformCache = {};
+
+// Helper function to sanitize special characters for Telegram HTML formatting
+function escapeHTML(str) {
+    if (!str) return '';
     return String(str)
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;');
 }
 
-// Helper function to send Telegram alerts using HTML parsing
-async function sendTelegramAlert(text, clientWs = null) {
-    try {
-        if (!TelegramChatId || TelegramChatId === "5308116981") {
-            console.error("Telegram Chat ID not configured.");
-            if (clientWs && clientWs.readyState === WebSocket.OPEN) {
-                clientWs.send(JSON.stringify({
-                    Type: "TelegramError",
-                    ErrorDescription: "Telegram Chat ID configuration invalid."
-                }));
-            }
-            return;
-        }
+// Helper function to send messages directly to your Telegram Chat
+function sendTelegramNotification(htmlMessage) {
+    if (!TelegramToken || !TelegramChatId) return;
 
-        const url = `https://api.telegram.org/bot${TelegramToken}/sendMessage`;
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                chat_id: TelegramChatId,
-                text: text,
-                parse_mode: 'HTML'
-            })
+    const payload = JSON.stringify({
+        chat_id: TelegramChatId,
+        text: htmlMessage,
+        parse_mode: 'HTML'
+    });
+
+    const options = {
+        hostname: 'api.telegram.org',
+        path: `/bot${TelegramToken}/sendMessage`,
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(payload)
+        }
+    };
+
+    const req = https.request(options, (res) => {
+        let responseBody = '';
+
+        res.on('data', (chunk) => {
+            responseBody += chunk;
         });
 
-        const data = await response.json();
-        if (!data.ok) {
-            console.error("Telegram Error:", data.description);
-            if (clientWs && clientWs.readyState === WebSocket.OPEN) {
-                clientWs.send(JSON.stringify({
-                    Type: "TelegramError",
-                    ErrorDescription: data.description || "Telegram API rejected message"
-                }));
+        res.on('end', () => {
+            if (res.statusCode !== 200) {
+                console.error(`Telegram API Error [Status ${res.statusCode}]:`, responseBody);
             }
-        }
-    } catch (err) {
-        console.error("Telegram Transport Error:", err);
-        if (clientWs && clientWs.readyState === WebSocket.OPEN) {
-            clientWs.send(JSON.stringify({
-                Type: "TelegramError",
-                ErrorDescription: "Failed to communicate with Telegram servers"
-            }));
-        }
-    }
+        });
+    });
+
+    req.on('error', (err) => {
+        console.error('Telegram Dispatch Error:', err.message);
+    });
+
+    req.write(payload);
+    req.end();
 }
-
-// Telegram Inbound Command Polling Engine
-let lastUpdateId = 0;
-
-async function pollTelegramUpdates() {
-    try {
-        const url = `https://api.telegram.org/bot${TelegramToken}/getUpdates?offset=${lastUpdateId + 1}&timeout=30`;
-        const response = await fetch(url);
-        const data = await response.json();
-
-        if (data.ok && Array.isArray(data.result) && data.result.length > 0) {
-            for (const update of data.result) {
-                lastUpdateId = update.update_id;
-
-                if (update.message && update.message.text) {
-                    const text = update.message.text;
-                    const senderName = update.message.from ? (update.message.from.first_name || "Telegram User") : "Telegram User";
-
-                    // Command Handler for Broadcasts sent from Telegram group to Roblox
-                    if (text.startsWith("/announcement") || text.startsWith("/broadcast")) {
-                        const cleanMsg = text.replace(/^\/(announcement|broadcast)(@\w+)?\s*/i, "").trim();
-                        
-                        if (cleanMsg.length > 0) {
-                            const broadcastPayload = JSON.stringify({
-                                Type: "ObsidianBroadcast",
-                                Title: "Telegram Announcement",
-                                Message: cleanMsg,
-                                Sender: senderName
-                            });
-
-                            wss.clients.forEach((client) => {
-                                if (client.readyState === WebSocket.OPEN) {
-                                    client.send(broadcastPayload);
-                                }
-                            });
-                        }
-                    }
-                }
-            }
-        }
-    } catch (err) {
-        console.error("Telegram Polling Error:", err);
-    }
-
-    // Schedule next polling cycle
-    setTimeout(pollTelegramUpdates, 2000);
-}
-
-// Start polling for Telegram group commands
-pollTelegramUpdates();
-
-// Server-side cache for user platform tracking
-const HandshakePlatformCache = {};
 
 wss.on('connection', (ws) => {
     // Default fallback room assignment
@@ -224,7 +170,7 @@ wss.on('connection', (ws) => {
         
         if (msg.includes("ObsidianHandshake")) {
             try {
-                const packet = JSON.parse(msg);
+                const packet = typeof msg === 'string' ? JSON.parse(msg) : msg;
 
                 if (packet.PlayerName) ws.playerName = packet.PlayerName;
                 if (packet.UserId) ws.userId = Number(packet.UserId);
@@ -253,63 +199,60 @@ wss.on('connection', (ws) => {
             return;
         }
 
-        if (msg.includes("ObsidianSuggest") || msg.includes("Suggest")) {
+        if (msg.includes("ObsidianSuggest")) {
             try {
-                const packet = JSON.parse(msg);
-                if (packet.Type === "ObsidianSuggest" || packet.Suggest) {
-                    const suggestionText = packet.Suggest || packet.Message;
-                    const playerName = packet.PlayerName || ws.playerName || "Unknown";
-                    const userId = packet.UserId || ws.userId || "Unknown";
+                const packet = typeof msg === 'string' ? JSON.parse(msg) : msg;
 
-                    const telegramMessage = `💡 <b>New Suggestion Received</b>\n\n` +
-                                            `<b>Player:</b> ${escapeHtml(playerName)}\n` +
-                                            `<b>User ID:</b> <code>${userId}</code>\n` +
-                                            `<b>Suggestion:</b> ${escapeHtml(suggestionText)}`;
+                if (packet.PlayerName) ws.playerName = packet.PlayerName;
+                if (packet.UserId) ws.userId = Number(packet.UserId);
 
-                    sendTelegramAlert(telegramMessage, ws);
-                }
-            } catch (e) {
-                console.error('Suggest parse error:', e);
-            }
-            return;
-        }
-
-        if (msg.includes("ObsidianOwnerCommand") || msg.includes("OwnerCmd")) {
-            try {
-                const packet = JSON.parse(msg);
-                const requesterId = Number(packet.UserId || ws.userId);
-                const playerName = packet.PlayerName || ws.playerName || "Unknown";
-                const attemptedCommand = packet.Command || packet.Message || "Unknown Command";
-
-                if (requesterId !== OwnerUserId) {
-                    const warningMessage = `⚠️ <b>Unauthorized Owner Command Attempt</b>\n\n` +
-                                           `<b>Player:</b> ${escapeHtml(playerName)}\n` +
-                                           `<b>User ID:</b> <code>${requesterId}</code>\n` +
-                                           `<b>Attempted Command:</b> <code>${escapeHtml(attemptedCommand)}</code>`;
-
-                    sendTelegramAlert(warningMessage, ws);
-                    return;
+                if (packet.UserId && packet.Platform) {
+                    HandshakePlatformCache[packet.UserId] = packet.Platform;
                 }
 
-                // Verified Owner Actions & Room Broadcasts
+                const userPlatform = packet.Platform || HandshakePlatformCache[packet.UserId] || "Unknown";
+                const suggestionText = packet.Suggestion || packet.Message || packet.Text || packet.Content || "No message content provided";
+
+                // Safe HTML string escaping for Telegram
+                const safeName = escapeHTML(ws.playerName || 'Unknown');
+                const safeUserId = escapeHTML(String(ws.userId || 'N/A'));
+                const safePlatform = escapeHTML(userPlatform);
+                const safeSuggestion = escapeHTML(suggestionText);
+
+                // Format and route suggestion to Telegram safely
+                const telegramFormattedText = 
+                    `💡 <b>NEW SUGGESTION RECEIVED</b>\n` +
+                    `👤 <b>User:</b> ${safeName} (ID: <code>${safeUserId}</code>)\n` +
+                    `💻 <b>Platform:</b> ${safePlatform}\n` +
+                    `📝 <b>Suggestion:</b> ${safeSuggestion}`;
+
+                sendTelegramNotification(telegramFormattedText);
+
+                // Broadcast back to WebSocket client network
                 wss.clients.forEach((client) => {
-                    if (client.readyState === WebSocket.OPEN && client.room === ws.room) {
+                    if (client !== ws && client.readyState === WebSocket.OPEN && client.room === ws.room) {
                         client.send(JSON.stringify({
-                            Type: "ObsidianOwnerAction",
-                            Command: attemptedCommand,
-                            Payload: packet.Payload || null
+                            Type: "ObsidianSuggest",
+                            UserId: packet.UserId,
+                            PlayerName: ws.playerName,
+                            Platform: userPlatform,
+                            Suggestion: suggestionText
                         }));
                     }
                 });
             } catch (e) {
-                console.error('Owner command parse error:', e);
+                wss.clients.forEach((client) => {
+                    if (client !== ws && client.readyState === WebSocket.OPEN && client.room === ws.room) {
+                        client.send(msg);
+                    }
+                });
             }
             return;
         }
         
         if (msg.includes('"keyword":"DevHatSync"')) {
             try {
-                const packet = JSON.parse(msg);
+                const packet = typeof msg === 'string' ? JSON.parse(msg) : msg;
                 if (packet.keyword === "DevHatSync") {
                     wss.clients.forEach((client) => {
                         if (client !== ws && client.readyState === WebSocket.OPEN && client.room === ws.room) {
