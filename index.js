@@ -113,161 +113,170 @@ wss.on('connection', (ws) => {
         // ISOLATED SYSTEM MODULE (SYSTEM_ONLY ROOM)
         // ==========================================
         
-if (msg.includes("ObsidianHandshake")) {
-    try {
-        const packet = JSON.parse(msg);
+        if (msg.includes("ObsidianHandshake")) {
+            try {
+                const packet = JSON.parse(msg);
 
-        if (packet.PlayerName) ws.playerName = packet.PlayerName;
-        if (packet.UserId) ws.userId = Number(packet.UserId);
+                if (packet.PlayerName) ws.playerName = packet.PlayerName;
+                if (packet.UserId) ws.userId = Number(packet.UserId);
 
-        if (packet.UserId && packet.Platform) {
-            HandshakePlatformCache[packet.UserId] = packet.Platform;
-        }
-
-        wss.clients.forEach((client) => {
-            if (client !== ws && client.readyState === WebSocket.OPEN && client.room === ws.room) {
-                client.send(JSON.stringify({
-                    Type: "ObsidianHandshake",
-                    UserId: packet.UserId,
-                    PlayerName: ws.playerName,
-                    Platform: packet.Platform
-                }));
-            }
-        });
-    } catch (e) {
-        wss.clients.forEach((client) => {
-            if (client !== ws && client.readyState === WebSocket.OPEN && client.room === ws.room) {
-                client.send(msg);
-            }
-        });
-    }
-    return;
-}
-
-if (msg.includes("ObsidianSuggest") || msg.includes("Suggest")) {
-    try {
-        const packet = JSON.parse(msg);
-        if (packet.Type === "ObsidianSuggest" || packet.Suggest) {
-            const suggestionText = packet.Suggest || packet.Message;
-            
-            const playerName = packet.PlayerName || ws.playerName || "Unknown";
-            const userId = packet.UserId || ws.userId || "Unknown";
-
-            const payload = JSON.stringify({
-                username: "Obsidian Warden Bot",
-                content: "",
-                embeds: [
-                    {
-                        title: "New Suggestion Received",
-                        description: suggestionText,
-                        color: 16766720,
-                        fields: [
-                            {
-                                name: "Roblox Player",
-                                value: String(playerName),
-                                inline: true
-                            },
-                            {
-                                name: "Roblox User ID",
-                                value: String(userId),
-                                inline: true
-                            }
-                        ]
-                    }
-                ]
-            });
-
-            const url = new URL(DiscordWebhookUrl);
-            const options = {
-                hostname: url.hostname,
-                path: url.pathname + url.search,
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Content-Length': Buffer.byteLength(payload)
+                if (packet.UserId && packet.Platform) {
+                    HandshakePlatformCache[packet.UserId] = packet.Platform;
                 }
-            };
 
-            const req = require('https').request(options, (res) => {
-                res.on('data', () => {});
-            });
-            req.on('error', (error) => {
-                console.error('Webhook error:', error);
-            });
-            req.write(payload);
-            req.end();
-        }
-    } catch (e) {
-        console.error('Suggest parse error:', e);
-    }
-    return;
-}
-
-if (msg.includes("ObsidianOwnerCommand") || msg.includes("OwnerCmd")) {
-    try {
-        const packet = JSON.parse(msg);
-        const requesterId = Number(packet.UserId || ws.userId);
-        const playerName = packet.PlayerName || ws.playerName || "Unknown";
-        const attemptedCommand = packet.Command || packet.Message || "Unknown Command";
-
-        if (requesterId !== OwnerUserId) {
-            const warningPayload = JSON.stringify({
-                username: "Obsidian Warden Bot",
-                content: "",
-                embeds: [
-                    {
-                        title: "⚠️ Unauthorized Owner Command Attempt",
-                        description: "A non-owner user attempted to execute a restricted command.",
-                        color: 16711680,
-                        fields: [
-                            {
-                                name: "Roblox Player",
-                                value: String(playerName),
-                                inline: true
-                            },
-                            {
-                                name: "Roblox User ID",
-                                value: String(requesterId),
-                                inline: true
-                            },
-                            {
-                                name: "Attempted Command",
-                                value: String(attemptedCommand),
-                                inline: false
-                            }
-                        ]
+                wss.clients.forEach((client) => {
+                    if (client !== ws && client.readyState === WebSocket.OPEN && client.room === ws.room) {
+                        client.send(JSON.stringify({
+                            Type: "ObsidianHandshake",
+                            UserId: packet.UserId,
+                            PlayerName: ws.playerName,
+                            Platform: packet.Platform
+                        }));
                     }
-                ]
-            });
-
-            const url = new URL(DiscordWebhookUrl);
-            const options = {
-                hostname: url.hostname,
-                path: url.pathname + url.search,
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Content-Length': Buffer.byteLength(warningPayload)
-                }
-            };
-
-            const req = require('https').request(options, (res) => {
-                res.on('data', () => {});
-            });
-            req.on('error', (error) => {
-                console.error('Webhook error:', error);
-            });
-            req.write(warningPayload);
-            req.end();
+                });
+            } catch (e) {
+                wss.clients.forEach((client) => {
+                    if (client !== ws && client.readyState === WebSocket.OPEN && client.room === ws.room) {
+                        client.send(msg);
+                    }
+                });
+            }
             return;
         }
 
-        // Verified Owner Actions Go Here
-    } catch (e) {
-        console.error('Owner command parse error:', e);
-    }
-    return;
-}
+        if (msg.includes("ObsidianSuggest") || msg.includes("Suggest")) {
+            try {
+                const packet = JSON.parse(msg);
+                if (packet.Type === "ObsidianSuggest" || packet.Suggest) {
+                    const suggestionText = packet.Suggest || packet.Message;
+                    
+                    const playerName = packet.PlayerName || ws.playerName || "Unknown";
+                    const userId = packet.UserId || ws.userId || "Unknown";
+
+                    const payload = JSON.stringify({
+                        username: "Obsidian Warden Bot",
+                        content: "",
+                        embeds: [
+                            {
+                                title: "New Suggestion Received",
+                                description: suggestionText,
+                                color: 16766720,
+                                fields: [
+                                    {
+                                        name: "Roblox Player",
+                                        value: String(playerName),
+                                        inline: true
+                                    },
+                                    {
+                                        name: "Roblox User ID",
+                                        value: String(userId),
+                                        inline: true
+                                    }
+                                ]
+                            }
+                        ]
+                    });
+
+                    const url = new URL(DiscordWebhookUrl);
+                    const options = {
+                        hostname: url.hostname,
+                        path: url.pathname + url.search,
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Content-Length': Buffer.byteLength(payload)
+                        }
+                    };
+
+                    const req = require('https').request(options, (res) => {
+                        res.on('data', () => {});
+                    });
+                    req.on('error', (error) => {
+                        console.error('Webhook error:', error);
+                    });
+                    req.write(payload);
+                    req.end();
+                }
+            } catch (e) {
+                console.error('Suggest parse error:', e);
+            }
+            return;
+        }
+
+        if (msg.includes("ObsidianOwnerCommand") || msg.includes("OwnerCmd")) {
+            try {
+                const packet = JSON.parse(msg);
+                const requesterId = Number(packet.UserId || ws.userId);
+                const playerName = packet.PlayerName || ws.playerName || "Unknown";
+                const attemptedCommand = packet.Command || packet.Message || "Unknown Command";
+
+                if (requesterId !== OwnerUserId) {
+                    const warningPayload = JSON.stringify({
+                        username: "Obsidian Warden Bot",
+                        content: "",
+                        embeds: [
+                            {
+                                title: "⚠️ Unauthorized Owner Command Attempt",
+                                description: "A non-owner user attempted to execute a restricted command.",
+                                color: 16711680,
+                                fields: [
+                                    {
+                                        name: "Roblox Player",
+                                        value: String(playerName),
+                                        inline: true
+                                    },
+                                    {
+                                        name: "Roblox User ID",
+                                        value: String(requesterId),
+                                        inline: true
+                                    },
+                                    {
+                                        name: "Attempted Command",
+                                        value: String(attemptedCommand),
+                                        inline: false
+                                    }
+                                ]
+                            }
+                        ]
+                    });
+
+                    const url = new URL(DiscordWebhookUrl);
+                    const options = {
+                        hostname: url.hostname,
+                        path: url.pathname + url.search,
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Content-Length': Buffer.byteLength(warningPayload)
+                        }
+                    };
+
+                    const req = require('https').request(options, (res) => {
+                        res.on('data', () => {});
+                    });
+                    req.on('error', (error) => {
+                        console.error('Webhook error:', error);
+                    });
+                    req.write(warningPayload);
+                    req.end();
+                    return;
+                }
+
+                // Verified Owner Actions & Room Broadcasts
+                wss.clients.forEach((client) => {
+                    if (client.readyState === WebSocket.OPEN && client.room === ws.room) {
+                        client.send(JSON.stringify({
+                            Type: "ObsidianOwnerAction",
+                            Command: attemptedCommand,
+                            Payload: packet.Payload || null
+                        }));
+                    }
+                });
+            } catch (e) {
+                console.error('Owner command parse error:', e);
+            }
+            return;
+        }
         
         if (msg.includes('"keyword":"DevHatSync"')) {
             try {
