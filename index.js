@@ -34,8 +34,8 @@ function escapeHTML(str) {
 async function sendTelegramNotification(htmlMessage) {
     if (!TelegramToken || !TelegramChatId) return;
 
-    const url = `https://api.telegram.org/bot${TelegramToken}/sendMessage?chat_id=-5308116981&text=`;
     const chatId = TelegramChatId.trim();
+    const url = `https://api.telegram.org/bot${TelegramToken}/sendMessage?chat_id=${chatId}&text=`;
 
     // Try modern fetch API first
     try {
@@ -83,7 +83,7 @@ async function sendTelegramNotification(htmlMessage) {
 
     const options = {
         hostname: 'api.telegram.org',
-        path: `/bot${TelegramToken}/sendMessage?chat_id=-5308116981&text=`,
+        path: `/bot${TelegramToken}/sendMessage?chat_id=${chatId}&text=`,
         method: 'POST',
         headers: {
             'Content-Type': 'application/json; charset=utf-8',
