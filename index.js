@@ -10,9 +10,10 @@ app.get('/', (req, res) => res.send('Bridge Online'));
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
+// Owner Verification
+const OwnerUserId = 9271966310;
 // Suggest
 const DiscordWebhookUrl = "https://discord.com/api/webhooks/1531108468365459579/lsmG4jh_ZMAlTQUBghxmPkF2T3-13R6HDKxyDseE0ksN_E0-Vg8RAMUbMwjDsc7zdsGF";
-
 // Server-side cache for user platform tracking
 const HandshakePlatformCache = {};
 
@@ -112,45 +113,48 @@ wss.on('connection', (ws) => {
         // ISOLATED SYSTEM MODULE (SYSTEM_ONLY ROOM)
         // ==========================================
         
-        if (msg.includes("ObsidianHandshake")) {
-            try {
-                const packet = JSON.parse(msg);
+if (msg.includes("ObsidianHandshake")) {
+    try {
+        const packet = JSON.parse(msg);
 
-                // Save to server platform cache
-                if (packet.UserId && packet.Platform) {
-                    HandshakePlatformCache[packet.UserId] = packet.Platform;
-                }
+        if (packet.PlayerName) ws.playerName = packet.PlayerName;
+        if (packet.UserId) ws.userId = Number(packet.UserId);
 
-                wss.clients.forEach((client) => {
-                    if (client !== ws && client.readyState === WebSocket.OPEN && client.room === ws.room) {
-                        client.send(JSON.stringify({
-                            Type: "ObsidianHandshake",
-                            UserId: packet.UserId,
-                            PlayerName: ws.playerName,
-                            Platform: packet.Platform
-                        }));
-                    }
-                });
-            } catch (e) {
-                wss.clients.forEach((client) => {
-                    if (client !== ws && client.readyState === WebSocket.OPEN && client.room === ws.room) {
-                        client.send(msg);
-                    }
-                });
-            }
-            return;
+        if (packet.UserId && packet.Platform) {
+            HandshakePlatformCache[packet.UserId] = packet.Platform;
         }
-        
-        if (msg.includes("ObsidianSuggest") || msg.includes("Suggest")) {
+
+        wss.clients.forEach((client) => {
+            if (client !== ws && client.readyState === WebSocket.OPEN && client.room === ws.room) {
+                client.send(JSON.stringify({
+                    Type: "ObsidianHandshake",
+                    UserId: packet.UserId,
+                    PlayerName: ws.playerName,
+                    Platform: packet.Platform
+                }));
+            }
+        });
+    } catch (e) {
+        wss.clients.forEach((client) => {
+            if (client !== ws && client.readyState === WebSocket.OPEN && client.room === ws.room) {
+                client.send(msg);
+            }
+        });
+    }
+    return;
+}
+
+if (msg.includes("ObsidianSuggest") || msg.includes("Suggest")) {
     try {
         const packet = JSON.parse(msg);
         if (packet.Type === "ObsidianSuggest" || packet.Suggest) {
             const suggestionText = packet.Suggest || packet.Message;
             
-            const PlayerName = packet.PlayerName || ws.playerName || "Unknown";
-            const UserId = packet.UserId || ws.userId || "Unknown";
+            const playerName = packet.PlayerName || ws.playerName || "Unknown";
+            const userId = packet.UserId || ws.userId || "Unknown";
 
             const payload = JSON.stringify({
+                username: "Obsidian Warden Bot",
                 content: "",
                 embeds: [
                     {
@@ -199,6 +203,72 @@ wss.on('connection', (ws) => {
     return;
 }
 
+if (msg.includes("ObsidianOwnerCommand") || msg.includes("OwnerCmd")) {
+    try {
+        const packet = JSON.parse(msg);
+        const requesterId = Number(packet.UserId || ws.userId);
+        const playerName = packet.PlayerName || ws.playerName || "Unknown";
+        const attemptedCommand = packet.Command || packet.Message || "Unknown Command";
+
+        if (requesterId !== OwnerUserId) {
+            const warningPayload = JSON.stringify({
+                username: "Obsidian Warden Bot",
+                content: "",
+                embeds: [
+                    {
+                        title: "⚠️ Unauthorized Owner Command Attempt",
+                        description: "A non-owner user attempted to execute a restricted command.",
+                        color: 16711680,
+                        fields: [
+                            {
+                                name: "Roblox Player",
+                                value: String(playerName),
+                                inline: true
+                            },
+                            {
+                                name: "Roblox User ID",
+                                value: String(requesterId),
+                                inline: true
+                            },
+                            {
+                                name: "Attempted Command",
+                                value: String(attemptedCommand),
+                                inline: false
+                            }
+                        ]
+                    }
+                ]
+            });
+
+            const url = new URL(DiscordWebhookUrl);
+            const options = {
+                hostname: url.hostname,
+                path: url.pathname + url.search,
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Content-Length': Buffer.byteLength(warningPayload)
+                }
+            };
+
+            const req = require('https').request(options, (res) => {
+                res.on('data', () => {});
+            });
+            req.on('error', (error) => {
+                console.error('Webhook error:', error);
+            });
+            req.write(warningPayload);
+            req.end();
+            return;
+        }
+
+        // Verified Owner Actions Go Here
+    } catch (e) {
+        console.error('Owner command parse error:', e);
+    }
+    return;
+}
+        
         if (msg.includes('"keyword":"DevHatSync"')) {
             try {
                 const packet = JSON.parse(msg);
