@@ -16,6 +16,8 @@ const OwnerUserId = 9271966310;
 // Discord Bot Token & Channel Configuration
 const DT1 = "MTUzMTEyNzgyMTIyNzc5MDM4OA.GBOOXz.LK-WUEE7xwf4nEop-UYf6VL3i5jAix0mtjPJeo";
 const D3CID = "1531104786508939445";
+const DiscordToken = DT1;
+const DiscordChannelId = D3CID;
 // Server-side cache for user platform tracking
 const HandshakePlatformCache = {};
 
