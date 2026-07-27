@@ -61,19 +61,38 @@ async function sendTelegramNotification(htmlMessage) {
     }
 }
 
-app.post('/telegram-webhook', (req, res) => {
+// Express route for incoming Telegram updates
+app.post('/getUpdates', (req, res) => {
     const update = req.body;
+    const message = update.message || (update.result && update.result.message);
 
-    if (update && update.message && update.message.text) {
-        const senderName = update.message.from.first_name || "Admin";
-        const telegramText = update.message.text;
+    if (message && message.text) {
+        const firstName = message.from.first_name || "Admin";
+        const lastName = message.from.last_name || "";
+        const senderName = `${firstName} ${lastName}`.trim();
+        const senderUserId = message.from.id;
+        const telegramText = message.text;
 
-        console.log(`Received from Telegram (${senderName}): ${telegramText}`);
+        let commandName = "";
+        let commandPayload = telegramText;
+
+        if (telegramText.startsWith("/")) {
+            const parts = telegramText.split(" ");
+            let cmdPart = parts[0];
+            if (cmdPart.includes("@")) {
+                cmdPart = cmdPart.split("@")[0];
+            }
+            commandName = cmdPart.substring(1).toLowerCase();
+            commandPayload = parts.slice(1).join(" ");
+        }
 
         const broadcastPayload = JSON.stringify({
             Type: "TelegramBroadcast",
+            Command: commandName,
             Sender: senderName,
-            Message: telegramText
+            UserId: senderUserId,
+            Message: telegramText,
+            Payload: commandPayload
         });
 
         wss.clients.forEach((client) => {
@@ -82,9 +101,6 @@ app.post('/telegram-webhook', (req, res) => {
             }
         });
     }
-
-    res.sendStatus(200);
-});
 
 wss.on('connection', (ws) => {
     // Default fallback room assignment
