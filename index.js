@@ -190,9 +190,26 @@ wss.on('connection', (ws) => {
 
                     const req = require('https').request(options, (res) => {
                         res.on('data', () => {});
+                        res.on('end', () => {
+                            if (res.statusCode === 204 || res.statusCode === 200) {
+                                ws.send(JSON.stringify({
+                                    Type: "SuggestionSuccess",
+                                    response: "sent"
+                                }));
+                            } else {
+                                ws.send(JSON.stringify({
+                                    Type: "SuggestionFailed",
+                                    response: res.statusCode
+                                }));
+                            }
+                        });
                     });
                     req.on('error', (error) => {
                         console.error('Webhook error:', error);
+                        ws.send(JSON.stringify({
+                            Type: "SuggestionFailed",
+                            response: error.message
+                        }));
                     });
                     req.write(payload);
                     req.end();
