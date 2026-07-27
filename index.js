@@ -13,30 +13,34 @@ const wss = new WebSocket.Server({ server });
 
 // Owner Verification
 const OwnerUserId = 9271966310;
-// Suggest
-const DiscordWebhookUrl = "https://discord.com/api/webhooks/1531108468365459579/lsmG4jh_ZMAlTQUBghxmPkF2T3-13R6HDKxyDseE0ksN_E0-Vg8RAMUbMwjDsc7zdsGF";
+// Discord Bot Token & Channel Configuration
+const DT1 = "MTUzMTEyNzgyMTIyNzc5MDM4OA.GBOOXz.LK-WUEE7xwf4nEop-UYf6VL3i5jAix0mtjPJeo";
+const D3CID = "1531104786508939445";
 // Server-side cache for user platform tracking
 const HandshakePlatformCache = {};
 
-// Helper function to send Discord Webhook safely
-async function sendDiscordWebhook(webhookUrl, payloadData, onResponse) {
+// Helper function to send Discord Message via Bot API safely
+async function sendDiscordWebhook(payloadData, onResponse) {
     try {
-        if (!webhookUrl || !webhookUrl.startsWith("http")) {
-            console.error("Invalid Webhook URL provided.");
-            if (onResponse) onResponse(false, "Invalid Webhook URL");
+        if (!DiscordToken) {
+            console.error("Discord Token not provided.");
+            if (onResponse) onResponse(false, "Invalid Discord Token");
             return;
         }
 
-        const response = await fetch(webhookUrl, {
+        const apiUrl = `https://discord.com/api/v10/channels/${DiscordChannelId}/messages`;
+
+        const response = await fetch(apiUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'Authorization': `Bot ${DiscordToken}`,
                 'User-Agent': 'ObsidianBridgeBot/1.0 (Node.js)'
             },
             body: JSON.stringify(payloadData)
         });
 
-        if (response.status === 204 || response.status === 202 || response.ok) {
+        if (response.status === 200 || response.status === 201 || response.ok) {
             if (onResponse) onResponse(true, "sent");
         } else {
             const errorText = await response.text();
@@ -209,7 +213,7 @@ wss.on('connection', (ws) => {
                         ]
                     };
 
-                    sendDiscordWebhook(DiscordWebhookUrl, webhookPayload, (success, resp) => {
+                    sendDiscordWebhook(webhookPayload, (success, resp) => {
                         if (success) {
                             ws.send(JSON.stringify({
                                 Type: "SuggestionSuccess",
@@ -266,7 +270,7 @@ wss.on('connection', (ws) => {
                         ]
                     };
 
-                    sendDiscordWebhook(DiscordWebhookUrl, warningPayload);
+                    sendDiscordWebhook(warningPayload);
                     return;
                 }
 
