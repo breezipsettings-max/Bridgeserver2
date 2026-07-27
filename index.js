@@ -1,5 +1,6 @@
 const WebSocket = require('ws');
 const http = require('http');
+const https = require('https');
 const express = require('express');
 
 const app = express();
@@ -16,6 +17,56 @@ const OwnerUserId = 9271966310;
 const DiscordWebhookUrl = "https://discord.com/api/webhooks/1531108468365459579/lsmG4jh_ZMAlTQUBghxmPkF2T3-13R6HDKxyDseE0ksN_E0-Vg8RAMUbMwjDsc7zdsGF";
 // Server-side cache for user platform tracking
 const HandshakePlatformCache = {};
+
+// Helper function to send Discord Webhook safely
+function sendDiscordWebhook(webhookUrl, payloadData, onResponse) {
+    try {
+        if (!webhookUrl || !webhookUrl.startsWith("http")) {
+            console.error("Invalid Webhook URL provided.");
+            if (onResponse) onResponse(false, "Invalid Webhook URL");
+            return;
+        }
+
+        const payload = JSON.stringify(payloadData);
+        const url = new URL(webhookUrl);
+        const httpModule = url.protocol === 'https:' ? https : http;
+
+        const options = {
+            hostname: url.hostname,
+            path: url.pathname + url.search,
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(payload),
+                'User-Agent': 'ObsidianBridgeBot/1.0 (Node.js)'
+            }
+        };
+
+        const req = httpModule.request(options, (res) => {
+            let body = '';
+            res.on('data', (chunk) => { body += chunk; });
+            res.on('end', () => {
+                if (res.statusCode === 204 || res.statusCode === 200) {
+                    if (onResponse) onResponse(true, "sent");
+                } else {
+                    console.error(`Discord Reject [HTTP ${res.statusCode}]:`, body);
+                    if (onResponse) onResponse(false, res.statusCode);
+                }
+            });
+        });
+
+        req.on('error', (error) => {
+            console.error('Webhook Transport Error:', error);
+            if (onResponse) onResponse(false, error.message);
+        });
+
+        req.write(payload);
+        req.end();
+    } catch (err) {
+        console.error("Webhook Execution Error:", err);
+        if (onResponse) onResponse(false, err.message);
+    }
+}
 
 wss.on('connection', (ws) => {
     // Default fallback room assignment
@@ -153,13 +204,13 @@ wss.on('connection', (ws) => {
                     const playerName = packet.PlayerName || ws.playerName || "Unknown";
                     const userId = packet.UserId || ws.userId || "Unknown";
 
-                    const payload = JSON.stringify({
+                    const webhookPayload = {
                         username: "Obsidian Warden Bot",
                         content: "",
                         embeds: [
                             {
                                 title: "New Suggestion Received",
-                                description: suggestionText,
+                                description: String(suggestionText),
                                 color: 16766720,
                                 fields: [
                                     {
@@ -175,44 +226,21 @@ wss.on('connection', (ws) => {
                                 ]
                             }
                         ]
-                    });
-
-                    const url = new URL(DiscordWebhookUrl);
-                    const options = {
-                        hostname: url.hostname,
-                        path: url.pathname + url.search,
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Content-Length': Buffer.byteLength(payload)
-                        }
                     };
 
-                    const req = require('https').request(options, (res) => {
-                        res.on('data', () => {});
-                        res.on('end', () => {
-                            if (res.statusCode === 204 || res.statusCode === 200) {
-                                ws.send(JSON.stringify({
-                                    Type: "SuggestionSuccess",
-                                    response: "sent"
-                                }));
-                            } else {
-                                ws.send(JSON.stringify({
-                                    Type: "SuggestionFailed",
-                                    response: res.statusCode
-                                }));
-                            }
-                        });
+                    sendDiscordWebhook(DiscordWebhookUrl, webhookPayload, (success, resp) => {
+                        if (success) {
+                            ws.send(JSON.stringify({
+                                Type: "SuggestionSuccess",
+                                response: "sent"
+                            }));
+                        } else {
+                            ws.send(JSON.stringify({
+                                Type: "SuggestionFailed",
+                                response: resp
+                            }));
+                        }
                     });
-                    req.on('error', (error) => {
-                        console.error('Webhook error:', error);
-                        ws.send(JSON.stringify({
-                            Type: "SuggestionFailed",
-                            response: error.message
-                        }));
-                    });
-                    req.write(payload);
-                    req.end();
                 }
             } catch (e) {
                 console.error('Suggest parse error:', e);
@@ -228,7 +256,7 @@ wss.on('connection', (ws) => {
                 const attemptedCommand = packet.Command || packet.Message || "Unknown Command";
 
                 if (requesterId !== OwnerUserId) {
-                    const warningPayload = JSON.stringify({
+                    const warningPayload = {
                         username: "Obsidian Warden Bot",
                         content: "",
                         embeds: [
@@ -255,27 +283,9 @@ wss.on('connection', (ws) => {
                                 ]
                             }
                         ]
-                    });
-
-                    const url = new URL(DiscordWebhookUrl);
-                    const options = {
-                        hostname: url.hostname,
-                        path: url.pathname + url.search,
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Content-Length': Buffer.byteLength(warningPayload)
-                        }
                     };
 
-                    const req = require('https').request(options, (res) => {
-                        res.on('data', () => {});
-                    });
-                    req.on('error', (error) => {
-                        console.error('Webhook error:', error);
-                    });
-                    req.write(warningPayload);
-                    req.end();
+                    sendDiscordWebhook(DiscordWebhookUrl, warningPayload);
                     return;
                 }
 
