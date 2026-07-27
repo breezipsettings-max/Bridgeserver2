@@ -20,7 +20,7 @@ const TelegramChatId = "-5308116981";
 // Helper function to send Telegram alerts
 async function sendTelegramAlert(text) {
     try {
-        if (!TelegramChatId || TelegramChatId === "YOUR_CHAT_ID_HERE") {
+        if (!TelegramChatId || TelegramChatId === "5308116981") {
             console.error("Telegram Chat ID not configured.");
             return;
         }
