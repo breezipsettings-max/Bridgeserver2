@@ -1,6 +1,6 @@
 const WebSocket = require('ws');
 const http = require('http');
-const https = https = require('https');
+const https = require('https');
 const express = require('express');
 
 const app = express();
@@ -194,7 +194,6 @@ wss.on('connection', (ws) => {
                     const userId = packet.UserId || ws.userId || "Unknown";
 
                     const webhookPayload = {
-                        username: "Obsidian Warden Bot",
                         content: "",
                         embeds: [
                             {
@@ -246,7 +245,6 @@ wss.on('connection', (ws) => {
 
                 if (requesterId !== OwnerUserId) {
                     const warningPayload = {
-                        username: "Obsidian Warden Bot",
                         content: "",
                         embeds: [
                             {
