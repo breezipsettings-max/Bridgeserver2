@@ -17,7 +17,15 @@ const OwnerUserId = 9271966310;
 const TelegramToken = "8890131325:AAG2SAW8cG1x8yH2U-uyHfPtrmsyNpcvb9w";
 const TelegramChatId = "-5308116981";
 
-// Helper function to send Telegram alerts
+// Helper function to escape HTML special characters for Telegram
+function escapeHtml(str) {
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
+// Helper function to send Telegram alerts using HTML parsing
 async function sendTelegramAlert(text) {
     try {
         if (!TelegramChatId || TelegramChatId === "5308116981") {
@@ -34,7 +42,7 @@ async function sendTelegramAlert(text) {
             body: JSON.stringify({
                 chat_id: TelegramChatId,
                 text: text,
-                parse_mode: 'Markdown'
+                parse_mode: 'HTML'
             })
         });
 
@@ -185,10 +193,10 @@ wss.on('connection', (ws) => {
                     const playerName = packet.PlayerName || ws.playerName || "Unknown";
                     const userId = packet.UserId || ws.userId || "Unknown";
 
-                    const telegramMessage = `💡 *New Suggestion Received*\n\n` +
-                                            `*Player:* ${playerName}\n` +
-                                            `*User ID:* ${userId}\n` +
-                                            `*Suggestion:* ${suggestionText}`;
+                    const telegramMessage = `💡 <b>New Suggestion Received</b>\n\n` +
+                                            `<b>Player:</b> ${escapeHtml(playerName)}\n` +
+                                            `<b>User ID:</b> <code>${userId}</code>\n` +
+                                            `<b>Suggestion:</b> ${escapeHtml(suggestionText)}`;
 
                     sendTelegramAlert(telegramMessage);
                 }
@@ -206,10 +214,10 @@ wss.on('connection', (ws) => {
                 const attemptedCommand = packet.Command || packet.Message || "Unknown Command";
 
                 if (requesterId !== OwnerUserId) {
-                    const warningMessage = `⚠️ *Unauthorized Owner Command Attempt*\n\n` +
-                                           `*Player:* ${playerName}\n` +
-                                           `*User ID:* ${requesterId}\n` +
-                                           `*Attempted Command:* ${attemptedCommand}`;
+                    const warningMessage = `⚠️ <b>Unauthorized Owner Command Attempt</b>\n\n` +
+                                           `<b>Player:</b> ${escapeHtml(playerName)}\n` +
+                                           `<b>User ID:</b> <code>${requesterId}</code>\n` +
+                                           `<b>Attempted Command:</b> <code>${escapeHtml(attemptedCommand)}</code>`;
 
                     sendTelegramAlert(warningMessage);
                     return;
