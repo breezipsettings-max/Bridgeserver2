@@ -30,12 +30,13 @@ function escapeHTML(str) {
         .replace(/>/g, '&gt;');
 }
 
-// Helper function to send messages directly to your Telegram Chat
+// Helper function to send messages directly to your Telegram Chat with encoded &text= query parameter
 async function sendTelegramNotification(htmlMessage) {
     if (!TelegramToken || !TelegramChatId) return;
 
     const chatId = TelegramChatId.trim();
-    const url = `https://api.telegram.org/bot${TelegramToken}/sendMessage?chat_id=${chatId}&text=`;
+    const encodedText = encodeURIComponent(htmlMessage);
+    const url = `https://api.telegram.org/bot${TelegramToken}/sendMessage?chat_id=${chatId}&text=${encodedText}`;
 
     // Try modern fetch API first
     try {
@@ -57,7 +58,10 @@ async function sendTelegramNotification(htmlMessage) {
                 
                 // Fallback: Strip HTML tags and send as plain text
                 const plainMessage = htmlMessage.replace(/<[^>]*>?/gm, '');
-                await fetch(url, {
+                const encodedPlain = encodeURIComponent(plainMessage);
+                const fallbackUrl = `https://api.telegram.org/bot${TelegramToken}/sendMessage?chat_id=${chatId}&text=${encodedPlain}`;
+
+                await fetch(fallbackUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json; charset=utf-8' },
                     body: JSON.stringify({
@@ -83,7 +87,7 @@ async function sendTelegramNotification(htmlMessage) {
 
     const options = {
         hostname: 'api.telegram.org',
-        path: `/bot${TelegramToken}/sendMessage?chat_id=${chatId}&text=`,
+        path: `/bot${TelegramToken}/sendMessage?chat_id=${chatId}&text=${encodedText}`,
         method: 'POST',
         headers: {
             'Content-Type': 'application/json; charset=utf-8',
