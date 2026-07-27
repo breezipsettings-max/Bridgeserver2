@@ -22,9 +22,6 @@ const OwnerUserId = 9271966310;
 // Server-side cache for user platform tracking
 const HandshakePlatformCache = {};
 
-// Track Telegram update offset for polling
-let telegramOffset = 0;
-
 function escapeHTML(str) {
     if (!str) return '';
     return String(str)
@@ -33,27 +30,48 @@ function escapeHTML(str) {
         .replace(/>/g, '&gt;');
 }
 
-async function sendTelegramNotification(htmlMessage) {
+async function sendTelegramNotification(htmlMessage, replyMarkup = null) {
     if (!TelegramToken || !TelegramChatId) {
         return;
     }
 
     const chatId = TelegramChatId.trim();
-    const encodedText = encodeURIComponent(htmlMessage);
-    const url = `https://api.telegram.org/bot${TelegramToken}/sendMessage?chat_id=${chatId}&text=${encodedText}&parse_mode=HTML`;
+    const url = `https://api.telegram.org/bot${TelegramToken}/sendMessage`;
+    
+    const payload = {
+        chat_id: chatId,
+        text: htmlMessage,
+        parse_mode: 'HTML'
+    };
+
+    if (replyMarkup) {
+        payload.reply_markup = replyMarkup;
+    }
 
     try {
         if (typeof fetch !== 'undefined') {
-            const response = await fetch(url, { method: 'POST' });
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
             const data = await response.json();
             console.log("Telegram Response:", data);
 
             if (!data.ok) {
+                console.error("Telegram API Error Details:", data);
                 const plainMessage = htmlMessage.replace(/<[^>]*>?/gm, '');
-                const encodedPlain = encodeURIComponent(plainMessage);
-                const fallbackUrl = `https://api.telegram.org/bot${TelegramToken}/sendMessage?chat_id=${chatId}&text=${encodedPlain}`;
+                const fallbackPayload = {
+                    chat_id: chatId,
+                    text: plainMessage
+                };
+                if (replyMarkup) fallbackPayload.reply_markup = replyMarkup;
 
-                const fallbackResponse = await fetch(fallbackUrl, { method: 'POST' });
+                const fallbackResponse = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(fallbackPayload)
+                });
                 const fallbackData = await fallbackResponse.json();
                 console.log("Telegram Fallback Response:", fallbackData);
             }
@@ -63,6 +81,8 @@ async function sendTelegramNotification(htmlMessage) {
         console.error("Telegram Dispatch Error:", err.message);
     }
 }
+
+// Telegram Webhook Endpoint with Targeted Parsing for /replytosuggest
 app.post('/telegram-webhook', (req, res) => {
     const update = req.body;
 
@@ -246,7 +266,7 @@ wss.on('connection', (ws) => {
             return;
         }
         
-         if (msg.includes("TelegramBroadcast") || msg.includes("ObsidianSuggest")) {
+        if (msg.includes("TelegramBroadcast") || msg.includes("ObsidianSuggest")) {
             try {
                 const packet = typeof msg === 'string' ? JSON.parse(msg) : msg;
                 const messageText = packet.Message || packet.Suggestion || "No message content provided";
@@ -261,7 +281,6 @@ wss.on('connection', (ws) => {
                     `👤 <b>User:</b> ${safeName} (ID: <code>${safeUserId}</code>)\n` +
                     `📝 <b>Message:</b> ${safeMessage}`;
 
-                // Inline keyboard button that pre-fills the reply command in Telegram
                 const replyMarkup = {
                     inline_keyboard: [
                         [
@@ -273,26 +292,7 @@ wss.on('connection', (ws) => {
                     ]
                 };
 
-                // Send message with inline button via Telegram API
-                if (TelegramToken && TelegramChatId) {
-                    const chatId = TelegramChatId.trim();
-                    const postData = JSON.stringify({
-                        chat_id: chatId,
-                        text: telegramFormattedText,
-                        parse_mode: 'HTML',
-                        reply_markup: replyMarkup
-                    });
-
-                    const url = `https://api.telegram.org/bot${TelegramToken}/sendMessage`;
-
-                    if (typeof fetch !== 'undefined') {
-                        fetch(url, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: postData
-                        }).catch((err) => console.error("Telegram Notification Error:", err.message));
-                    }
-                }
+                sendTelegramNotification(telegramFormattedText, replyMarkup);
             } catch (e) {
                 console.error("Message Parse Error:", e.message);
             }
