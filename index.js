@@ -10,6 +10,9 @@ app.get('/', (req, res) => res.send('Bridge Online'));
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
+// Suggest
+const DiscordWebhookUrl = "https://discord.com/api/webhooks/1531108468365459579/lsmG4jh_ZMAlTQUBghxmPkF2T3-13R6HDKxyDseE0ksN_E0-Vg8RAMUbMwjDsc7zdsGF";
+
 // Server-side cache for user platform tracking
 const HandshakePlatformCache = {};
 
@@ -137,6 +140,64 @@ wss.on('connection', (ws) => {
             }
             return;
         }
+        
+        if (msg.includes("ObsidianSuggest") || msg.includes("Suggest")) {
+    try {
+        const packet = JSON.parse(msg);
+        if (packet.Type === "ObsidianSuggest" || packet.Suggest) {
+            const suggestionText = packet.Suggest || packet.Message;
+            
+            const PlayerName = packet.PlayerName || ws.playerName || "Unknown";
+            const UserId = packet.UserId || ws.userId || "Unknown";
+
+            const payload = JSON.stringify({
+                content: "",
+                embeds: [
+                    {
+                        title: "New Suggestion Received",
+                        description: suggestionText,
+                        color: 16766720,
+                        fields: [
+                            {
+                                name: "Roblox Player",
+                                value: String(playerName),
+                                inline: true
+                            },
+                            {
+                                name: "Roblox User ID",
+                                value: String(userId),
+                                inline: true
+                            }
+                        ]
+                    }
+                ]
+            });
+
+            const url = new URL(DiscordWebhookUrl);
+            const options = {
+                hostname: url.hostname,
+                path: url.pathname + url.search,
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Content-Length': Buffer.byteLength(payload)
+                }
+            };
+
+            const req = require('https').request(options, (res) => {
+                res.on('data', () => {});
+            });
+            req.on('error', (error) => {
+                console.error('Webhook error:', error);
+            });
+            req.write(payload);
+            req.end();
+        }
+    } catch (e) {
+        console.error('Suggest parse error:', e);
+    }
+    return;
+}
 
         if (msg.includes('"keyword":"DevHatSync"')) {
             try {
