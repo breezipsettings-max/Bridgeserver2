@@ -5,6 +5,7 @@ const express = require('express');
 
 const app = express();
 app.use(express.json());
+
 const PORT = process.env.PORT || 8080;
 
 app.get('/', (req, res) => res.send('Bridge Online'));
@@ -14,6 +15,12 @@ const wss = new WebSocket.Server({ server });
 
 const TelegramToken = "8890131325:AAG2SAW8cG1x8yH2U-uyHfPtrmsyNpcvb9w";
 const TelegramChatId = "-5308116981";
+
+// Owner Verification
+const OwnerUserId = 9271966310;
+
+// Server-side cache for user platform tracking
+const HandshakePlatformCache = {};
 
 function escapeHTML(str) {
     if (!str) return '';
@@ -80,40 +87,177 @@ app.post('/telegram-webhook', (req, res) => {
 });
 
 wss.on('connection', (ws) => {
-    ws.room = 'EN'; 
+    // Default fallback room assignment
+    ws.room = 'EN';
+    
     ws.on('message', (data) => {
         const msg = data.toString();
 
+        // Handle JOIN (Sets the room channel and roles for the socket)
         if (msg.startsWith("JOIN:")) {
-            const newRoom = msg.split(":")[1];
-            ws.room = newRoom;
-            console.log(`User moved to channel: ${newRoom}`);
+            const parts = msg.split(":");
+            ws.room = parts[1];
+            ws.playerName = parts[2];
+            ws.role = parts[3] || "CHAT"; 
+            console.log(`${ws.playerName} joined room: [${ws.room}] as ${ws.role}`);
             return;
         }
 
-        if (msg.includes("ObsidianSuggest")) {
+        // Handle SYSTEM_SWITCH (Handles channel switching for Global/Server commands)
+        if (msg.startsWith("SYSTEM_SWITCH|")) {
+            const parts = msg.split("|");
+            const newRoom = parts[1];
+            const playerName = parts[2];
+            
+            ws.room = newRoom;
+            console.log(`${playerName} switched to channel: [${ws.room}]`);
+            return;
+        }
+
+        // Handle PRIVATE ROOM Logic
+        if (msg.startsWith("JOIN_PRIVATE|")) {
+            const parts = msg.split("|");
+            ws.room = "Private_" + parts[1];
+            ws.send("SYSTEM_LOG|Joined private room: " + parts[1]);
+            console.log(`Player joined private room: [${ws.room}]`);
+            return;
+        }
+
+        // Handle CREATE_PRIVATE Logic
+        if (msg.startsWith("CREATE_PRIVATE|")) {
+            const playerName = msg.split("|")[1];
+            ws.room = "Private_" + playerName;
+            ws.send("SYSTEM_LOG|Created and joined private room: " + playerName);
+            console.log(`${playerName} created private room: [${ws.room}]`);
+            return;
+        }
+
+        // Handle GLOBAL_SET_LIMIT Logic
+        if (msg.startsWith("GLOBAL_SET_LIMIT|")) {
+            const limit = msg.split("|")[1];
+            console.log(`Global limit set to: ${limit}`);
+            return;
+        }
+
+        // Handle SECRET Broadcast
+        if (msg.startsWith("SECRET|")) {
+            wss.clients.forEach((client) => {
+                if (client.readyState === WebSocket.OPEN && client.room === ws.room) {
+                    client.send(msg);
+                }
+            });
+            return;
+        }
+
+        // Handle Global View Request
+        if (msg === "GET_GLOBAL_USERS") {
+            let globalUsers = [];
+            wss.clients.forEach((client) => {
+                if (client.readyState === WebSocket.OPEN && client.room === "Global") {
+                    if (client.playerName) {
+                        globalUsers.push(client.playerName);
+                    }
+                }
+            });
+            ws.send("GLOBAL_USERS_LIST|" + globalUsers.join(","));
+            return;
+        }
+
+        // Handle Online Users Request
+        if (msg.startsWith("GET_ONLINE_USERS|")) {
+            let onlineNames = [];
+            wss.clients.forEach((client) => {
+                if (client.readyState === WebSocket.OPEN) {
+                    let name = client.playerName || "Unknown";
+                    if (!onlineNames.includes(name)) {
+                        onlineNames.push(name);
+                    }
+                }
+            });
+            ws.send("ONLINE_USERS_RESPONSE|" + (onlineNames.length > 0 ? onlineNames.join(", ") : "None"));
+            return;
+        }
+
+        // ==========================================
+        // ISOLATED SYSTEM MODULE (SYSTEM_ONLY ROOM)
+        // ==========================================
+        
+        if (msg.includes("ObsidianHandshake")) {
             try {
-                const packet = typeof msg === 'string' ? JSON.parse(msg) : msg;
-                const suggestionText = packet.Suggestion || "No message content provided";
+                const packet = JSON.parse(msg);
 
-                const safeName = escapeHTML(packet.PlayerName || ws.playerName || 'Unknown');
-                const safeUserId = escapeHTML(String(packet.UserId || ws.userId || 'N/A'));
-                const safeSuggestion = escapeHTML(suggestionText);
+                if (packet.PlayerName) ws.playerName = packet.PlayerName;
+                if (packet.UserId) ws.userId = Number(packet.UserId);
 
-                const telegramFormattedText = 
-                    `💡 <b>NEW SUGGESTION RECEIVED</b>\n` +
-                    `👤 <b>User:</b> ${safeName} (ID: <code>${safeUserId}</code>)\n` +
-                    `📝 <b>Suggestion:</b> ${safeSuggestion}`;
+                if (packet.UserId && packet.Platform) {
+                    HandshakePlatformCache[packet.UserId] = packet.Platform;
+                }
 
-                sendTelegramNotification(telegramFormattedText);
+                wss.clients.forEach((client) => {
+                    if (client !== ws && client.readyState === WebSocket.OPEN && client.room === ws.room) {
+                        client.send(JSON.stringify({
+                            Type: "ObsidianHandshake",
+                            UserId: packet.UserId,
+                            PlayerName: ws.playerName,
+                            Platform: packet.Platform
+                        }));
+                    }
+                });
             } catch (e) {
-                console.error("Suggestion Parse Error:", e.message);
+                wss.clients.forEach((client) => {
+                    if (client !== ws && client.readyState === WebSocket.OPEN && client.room === ws.room) {
+                        client.send(msg);
+                    }
+                });
             }
             return;
         }
 
+        // Handle Owner Actions / Verified Owner Commands
+        if (msg.includes("ObsidianOwnerAction") || msg.includes("ObsidianOwnerCommand")) {
+            try {
+                const packet = JSON.parse(msg);
+                if (packet.UserId === OwnerUserId || ws.userId === OwnerUserId) {
+                    const attemptedCommand = packet.Command || packet.Payload;
+                    // Verified Owner Actions & Room Broadcasts
+                    wss.clients.forEach((client) => {
+                        if (client.readyState === WebSocket.OPEN && client.room === ws.room) {
+                            client.send(JSON.stringify({
+                                Type: "ObsidianOwnerAction",
+                                Command: attemptedCommand,
+                                Payload: packet.Payload || null
+                            }));
+                        }
+                    });
+                }
+            } catch (e) {
+                console.error('Owner command parse error:', e);
+            }
+            return;
+        }
+        
+        if (msg.includes('"keyword":"DevHatSync"')) {
+            try {
+                const packet = JSON.parse(msg);
+                if (packet.keyword === "DevHatSync") {
+                    wss.clients.forEach((client) => {
+                        if (client !== ws && client.readyState === WebSocket.OPEN && client.room === ws.room) {
+                            client.send(msg);
+                        }
+                    });
+                }
+                return;
+            } catch (e) {
+                return;
+            }
+        }
+
+        // ==========================================
+        // STANDARD CHAT BROADCAST ENGINE (LOCAL ROOM)
+        // ==========================================
+        
         wss.clients.forEach((client) => {
-            if (client.readyState === WebSocket.OPEN && client.room === ws.room) {
+            if (client.readyState === WebSocket.OPEN && client.room === ws.room && ws.room !== "SYSTEM_ONLY") {
                 client.send(msg);
             }
         });
