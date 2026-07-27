@@ -234,19 +234,19 @@ wss.on('connection', (ws) => {
             return;
         }
 
-        // Handle Owner Actions / Verified Owner Commands
-        if (msg.includes("ObsidianOwnerAction") || msg.includes("ObsidianOwnerCommand")) {
+// Handle Owner Actions / Verified Owner Commands / Announcements
+        if (msg.includes("ObsidianOwnerAction") || msg.includes("ObsidianOwnerCommand") || msg.includes("ObsidianAnnouncement")) {
             try {
                 const packet = JSON.parse(msg);
                 if (packet.UserId === OwnerUserId || ws.userId === OwnerUserId) {
                     const attemptedCommand = packet.Command || packet.Payload;
-                    // Verified Owner Actions & Room Broadcasts
                     wss.clients.forEach((client) => {
                         if (client.readyState === WebSocket.OPEN && client.room === ws.room) {
                             client.send(JSON.stringify({
-                                Type: "ObsidianOwnerAction",
+                                Type: packet.Type || "ObsidianOwnerAction",
                                 Command: attemptedCommand,
-                                Payload: packet.Payload || null
+                                Payload: packet.Payload || null,
+                                PlayerName: packet.PlayerName || packet.Sender || "Owner"
                             }));
                         }
                     });
