@@ -31,11 +31,52 @@ function escapeHTML(str) {
 }
 
 // Helper function to send messages directly to your Telegram Chat
-function sendTelegramNotification(htmlMessage) {
+async function sendTelegramNotification(htmlMessage) {
     if (!TelegramToken || !TelegramChatId) return;
 
+    const url = `https://api.telegram.org/bot${TelegramToken}/sendMessage`;
+    const chatId = TelegramChatId.trim();
+
+    // Try modern fetch API first
+    try {
+        if (typeof fetch !== 'undefined') {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json; charset=utf-8' },
+                body: JSON.stringify({
+                    chat_id: chatId,
+                    text: htmlMessage,
+                    parse_mode: 'HTML'
+                })
+            });
+
+            const data = await response.json();
+
+            if (!data.ok) {
+                console.error('Telegram API Rejected HTML Mode:', data.description);
+                
+                // Fallback: Strip HTML tags and send as plain text
+                const plainMessage = htmlMessage.replace(/<[^>]*>?/gm, '');
+                await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json; charset=utf-8' },
+                    body: JSON.stringify({
+                        chat_id: chatId,
+                        text: plainMessage
+                    })
+                });
+            } else {
+                console.log('Telegram notification sent successfully!');
+            }
+            return;
+        }
+    } catch (err) {
+        console.error('Fetch Telegram Error:', err.message);
+    }
+
+    // Fallback HTTPS Request for older Node environments
     const payload = JSON.stringify({
-        chat_id: TelegramChatId,
+        chat_id: chatId,
         text: htmlMessage,
         parse_mode: 'HTML'
     });
@@ -45,21 +86,19 @@ function sendTelegramNotification(htmlMessage) {
         path: `/bot${TelegramToken}/sendMessage`,
         method: 'POST',
         headers: {
-            'Content-Type': 'application/json',
-            'Content-Length': Buffer.byteLength(payload)
+            'Content-Type': 'application/json; charset=utf-8',
+            'Content-Length': Buffer.byteLength(payload, 'utf8')
         }
     };
 
     const req = https.request(options, (res) => {
         let responseBody = '';
-
-        res.on('data', (chunk) => {
-            responseBody += chunk;
-        });
-
+        res.on('data', (chunk) => { responseBody += chunk; });
         res.on('end', () => {
             if (res.statusCode !== 200) {
                 console.error(`Telegram API Error [Status ${res.statusCode}]:`, responseBody);
+            } else {
+                console.log('Telegram notification sent via HTTPS request!');
             }
         });
     });
