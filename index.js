@@ -212,6 +212,36 @@ wss.on('connection', (ws) => {
             }
             return;
         }
+        
+        if (msg.includes("TelegramBroadcast") || msg.includes("ObsidianSuggest")) {
+            try {
+                const packet = typeof msg === 'string' ? JSON.parse(msg) : msg;
+                const messageText = packet.Message || packet.Suggestion || "No message content provided";
+
+                const safeName = escapeHTML(packet.PlayerName || ws.playerName || 'Unknown');
+                const safeUserId = escapeHTML(String(packet.UserId || ws.userId || 'N/A'));
+                const safeMessage = escapeHTML(messageText);
+
+                const telegramFormattedText = 
+                    `💡 <b>NEW TELEGRAM BROADCAST</b>\n` +
+                    `👤 <b>User:</b> ${safeName} (ID: <code>${safeUserId}</code>)\n` +
+                    `📝 <b>Message:</b> ${safeMessage}`;
+
+                sendTelegramNotification(telegramFormattedText);
+            } catch (e) {
+                console.error("Message Parse Error:", e.message);
+            }
+            return;
+        }
+
+        wss.clients.forEach((client) => {
+            if (client.readyState === WebSocket.OPEN && client.room === ws.room) {
+                client.send(msg);
+            }
+        });
+    });
+});
+
 
         // Handle Owner Actions / Verified Owner Commands
         if (msg.includes("ObsidianOwnerAction") || msg.includes("ObsidianOwnerCommand")) {
