@@ -64,77 +64,62 @@ async function sendTelegramNotification(htmlMessage) {
     }
 }
 
-// Telegram Polling Function with Targeted Parsing for /replytosuggest
-async function pollTelegramUpdates() {
-    try {
-        const url = `https://api.telegram.org/bot${TelegramToken}/getUpdates?offset=${telegramOffset}&timeout=10`;
-        const response = await fetch(url);
-        const data = await response.json();
+// Telegram Webhook Endpoint with Targeted Parsing for /replytosuggest
+app.post('/telegram-webhook', (req, res) => {
+    const update = req.body;
 
-        if (data.ok && data.result && data.result.length > 0) {
-            for (const update of data.result) {
-                // Update offset to mark this update as processed
-                telegramOffset = update.update_id + 1;
+    if (update && update.message && update.message.text) {
+        const message = update.message;
+        const firstName = message.from.first_name || "Admin";
+        const lastName = message.from.last_name || "";
+        const senderName = `${firstName} ${lastName}`.trim();
+        const senderUserId = message.from.id;
+        const telegramText = message.text;
 
-                const message = update.message || (update.result && update.result.message);
+        console.log(`Received from Telegram Webhook (${senderName}): ${telegramText}`);
 
-                if (message && message.text) {
-                    const firstName = message.from.first_name || "Admin";
-                    const lastName = message.from.last_name || "";
-                    const senderName = `${firstName} ${lastName}`.trim();
-                    const senderUserId = message.from.id;
-                    const telegramText = message.text;
+        let commandName = "";
+        let commandPayload = telegramText;
 
-                    console.log(`Received from Telegram Polling (${senderName}): ${telegramText}`);
-
-                    let commandName = "";
-                    let commandPayload = telegramText;
-
-                    if (telegramText.startsWith("/")) {
-                        const parts = telegramText.split(" ");
-                        let cmdPart = parts[0];
-                        if (cmdPart.includes("@")) {
-                            cmdPart = cmdPart.split("@")[0];
-                        }
-                        commandName = cmdPart.substring(1).toLowerCase();
-                        commandPayload = parts.slice(1).join(" ");
-                    }
-
-                    let targetUser = "";
-                    let replyText = commandPayload;
-
-                    if (commandName === "replytosuggest") {
-                        const payloadParts = commandPayload.trim().split(" ");
-                        targetUser = payloadParts[0] || "";
-                        replyText = payloadParts.slice(1).join(" ") || "";
-                    }
-
-                    const broadcastPayload = JSON.stringify({
-                        Type: "TelegramCommand",
-                        Command: commandName,
-                        Sender: senderName,
-                        UserId: senderUserId,
-                        Message: telegramText,
-                        Payload: commandPayload,
-                        TargetUser: targetUser,
-                        ReplyText: replyText
-                    });
-
-                    wss.clients.forEach((client) => {
-                        if (client.readyState === WebSocket.OPEN) {
-                            client.send(broadcastPayload);
-                        }
-                    });
-                }
+        if (telegramText.startsWith("/")) {
+            const parts = telegramText.split(" ");
+            let cmdPart = parts[0];
+            if (cmdPart.includes("@")) {
+                cmdPart = cmdPart.split("@")[0];
             }
+            commandName = cmdPart.substring(1).toLowerCase();
+            commandPayload = parts.slice(1).join(" ");
         }
-    } catch (err) {
-        console.error("Telegram Polling Error:", err.message);
-    }
-}
 
-// Start polling Telegram every 3 seconds
-setInterval(pollTelegramUpdates, 3000);
+        let targetUser = "";
+        let replyText = commandPayload;
+
+        if (commandName === "replytosuggest") {
+            const payloadParts = commandPayload.trim().split(" ");
+            targetUser = payloadParts[0] || "";
+            replyText = payloadParts.slice(1).join(" ") || "";
+        }
+
+        const broadcastPayload = JSON.stringify({
+            Type: "TelegramCommand",
+            Command: commandName,
+            Sender: senderName,
+            UserId: senderUserId,
+            Message: telegramText,
+            Payload: commandPayload,
+            TargetUser: targetUser,
+            ReplyText: replyText
+        });
+
+        wss.clients.forEach((client) => {
+            if (client.readyState === WebSocket.OPEN) {
+                client.send(broadcastPayload);
+            }
+        });
+    }
+
+    res.sendStatus(200);
+});
 
 wss.on('connection', (ws) => {
     // Default fallback room assignment
