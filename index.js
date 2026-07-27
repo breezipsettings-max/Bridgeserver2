@@ -19,7 +19,7 @@ const DiscordWebhookUrl = "https://discord.com/api/webhooks/1531108468365459579/
 const HandshakePlatformCache = {};
 
 // Helper function to send Discord Webhook safely
-function sendDiscordWebhook(webhookUrl, payloadData, onResponse) {
+async function sendDiscordWebhook(webhookUrl, payloadData, onResponse) {
     try {
         if (!webhookUrl || !webhookUrl.startsWith("http")) {
             console.error("Invalid Webhook URL provided.");
@@ -27,43 +27,24 @@ function sendDiscordWebhook(webhookUrl, payloadData, onResponse) {
             return;
         }
 
-        const payload = JSON.stringify(payloadData);
-        const url = new URL(webhookUrl);
-        const httpModule = url.protocol === 'https:' ? https : http;
-
-        const options = {
-            hostname: url.hostname,
-            path: url.pathname + url.search,
+        const response = await fetch(webhookUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Content-Length': Buffer.byteLength(payload),
                 'User-Agent': 'ObsidianBridgeBot/1.0 (Node.js)'
-            }
-        };
-
-        const req = httpModule.request(options, (res) => {
-            let body = '';
-            res.on('data', (chunk) => { body += chunk; });
-            res.on('end', () => {
-                if (res.statusCode === 204 || res.statusCode === 200) {
-                    if (onResponse) onResponse(true, "sent");
-                } else {
-                    console.error(`Discord Reject [HTTP ${res.statusCode}]:`, body);
-                    if (onResponse) onResponse(false, res.statusCode);
-                }
-            });
+            },
+            body: JSON.stringify(payloadData)
         });
 
-        req.on('error', (error) => {
-            console.error('Webhook Transport Error:', error);
-            if (onResponse) onResponse(false, error.message);
-        });
-
-        req.write(payload);
-        req.end();
+        if (response.status === 204 || response.status === 202 || response.ok) {
+            if (onResponse) onResponse(true, "sent");
+        } else {
+            const errorText = await response.text();
+            console.error(`Discord Reject [HTTP ${response.status}]:`, errorText);
+            if (onResponse) onResponse(false, response.status);
+        }
     } catch (err) {
-        console.error("Webhook Execution Error:", err);
+        console.error("Webhook Execution Transport Error:", err);
         if (onResponse) onResponse(false, err.message);
     }
 }
