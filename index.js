@@ -80,6 +80,13 @@ app.post('/telegram-webhook', (req, res) => {
         const lastName = message.from.last_name || "";
         const senderName = `${firstName} ${lastName}`.trim();
         const senderUserId = message.from.id;
+
+        // Security check enforcing owner/admin validation
+        if (OwnerUserId && senderUserId !== OwnerUserId) {
+            console.log(`Unauthorized webhook access attempt from User ID: ${senderUserId}`);
+            return res.sendStatus(200);
+        }
+
         const telegramText = message.text;
 
         console.log(`Received from Telegram (${senderName} [${senderUserId}]): ${telegramText}`);
@@ -150,6 +157,8 @@ app.post('/telegram-webhook', (req, res) => {
                 targetWs.send(directPayload);
                 sendTelegramNotification(`✅ Reply successfully sent to user ID <code>${targetUser}</code>.`, null, senderUserId);
                 console.log(`Targeted reply routed to user ID ${targetUser}: ${replyText}`);
+            } else {
+                sendTelegramNotification(`⚠️ User ID <code>${targetUser}</code> is currently offline or not connected.`, null, senderUserId);
             }
         }
 
@@ -307,7 +316,7 @@ wss.on('connection', (ws) => {
         
         if (msg.includes("TelegramBroadcast") || msg.includes("ObsidianSuggest")) {
             try {
-                const packet = typeof msg === 'string' ? JSON.parse(msg) : msg;
+                const packet = JSON.parse(msg);
                 const messageText = packet.Message || packet.Suggestion || "No message content provided";
 
                 const rawName = packet.PlayerName || ws.playerName || 'Unknown';
