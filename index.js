@@ -36,32 +36,66 @@ async function sendTelegramNotification(htmlMessage, replyMarkup = null) {
     }
 
     const chatId = TelegramChatId.trim();
-    let url = `https://api.telegram.org/bot${TelegramToken}/sendMessage?chat_id=${chatId}&text=${encodeURIComponent(htmlMessage)}&parse_mode=HTML`;
+    const payload = {
+        chat_id: chatId,
+        text: htmlMessage,
+        parse_mode: 'HTML'
+    };
 
     if (replyMarkup) {
-        url += `&reply_markup=${encodeURIComponent(JSON.stringify(replyMarkup))}`;
+        payload.reply_markup = replyMarkup;
     }
 
-    try {
-        if (typeof fetch !== 'undefined') {
-            const response = await fetch(url, { method: 'POST' });
-            const data = await response.json();
-            console.log("Telegram Response:", data);
-
-            if (!data.ok) {
-                console.error("Telegram API Error Details:", data);
-                const plainMessage = htmlMessage.replace(/<[^>]*>?/gm, '');
-                let fallbackUrl = `https://api.telegram.org/bot${TelegramToken}/sendMessage?chat_id=${chatId}&text=${encodeURIComponent(plainMessage)}`;
-                
-                if (replyMarkup) {
-                    fallbackUrl += `&reply_markup=${encodeURIComponent(JSON.stringify(replyMarkup))}`;
+    const sendRequest = (dataObj) => {
+        return new Promise((resolve, reject) => {
+            const bodyStr = JSON.stringify(dataObj);
+            const options = {
+                hostname: 'api.telegram.org',
+                port: 443,
+                path: `/bot${TelegramToken}/sendMessage`,
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Content-Length': Buffer.byteLength(bodyStr)
                 }
+            };
 
-                const fallbackResponse = await fetch(fallbackUrl, { method: 'POST' });
-                const fallbackData = await fallbackResponse.json();
-                console.log("Telegram Fallback Response:", fallbackData);
+            const req = https.request(options, (res) => {
+                let responseData = '';
+                res.on('data', (chunk) => { responseData += chunk; });
+                res.on('end', () => {
+                    try {
+                        resolve(JSON.parse(responseData));
+                    } catch (e) {
+                        reject(new Error("Failed to parse Telegram response"));
+                    }
+                });
+            });
+
+            req.on('error', (err) => reject(err));
+            req.write(bodyStr);
+            req.end();
+        });
+    };
+
+    try {
+        const data = await sendRequest(payload);
+        console.log("Telegram Response:", data);
+
+        if (!data.ok) {
+            console.error("Telegram API Error Details:", data);
+            const plainMessage = htmlMessage.replace(/<[^>]*>?/gm, '');
+            const fallbackPayload = {
+                chat_id: chatId,
+                text: plainMessage
+            };
+
+            if (replyMarkup) {
+                fallbackPayload.reply_markup = replyMarkup;
             }
-            return;
+
+            const fallbackData = await sendRequest(fallbackPayload);
+            console.log("Telegram Fallback Response:", fallbackData);
         }
     } catch (err) {
         console.error("Telegram Dispatch Error:", err.message);
