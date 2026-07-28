@@ -1,5 +1,6 @@
 const WebSocket = require('ws');
 const http = require('http');
+const https = require('https');
 const express = require('express');
 
 const app = express();
@@ -67,7 +68,7 @@ async function sendTelegramNotification(htmlMessage, replyMarkup = null) {
     }
 }
 
-// Telegram Webhook Endpoint
+// Telegram Webhook Endpoint with Targeted Parsing for /replytosuggest
 app.post('/telegram-webhook', (req, res) => {
     const update = req.body;
 
@@ -77,16 +78,9 @@ app.post('/telegram-webhook', (req, res) => {
         const lastName = message.from.last_name || "";
         const senderName = `${firstName} ${lastName}`.trim();
         const senderUserId = message.from.id;
-
-        // Security check enforcing owner/admin validation
-        if (OwnerUserId && senderUserId !== OwnerUserId) {
-            console.log(`Unauthorized webhook access attempt from User ID: ${senderUserId}`);
-            return res.sendStatus(200);
-        }
-
         const telegramText = message.text;
 
-        console.log(`Received from Telegram (${senderName} [${senderUserId}]): ${telegramText}`);
+        console.log(`Received from Telegram (${senderName}): ${telegramText}`);
 
         let commandName = "";
         let commandPayload = telegramText;
@@ -101,6 +95,15 @@ app.post('/telegram-webhook', (req, res) => {
             commandPayload = parts.slice(1).join(" ");
         }
 
+        let targetUser = "";
+        let replyText = commandPayload;
+
+        if (commandName === "replytosuggest") {
+            const payloadParts = commandPayload.trim().split(" ");
+            targetUser = payloadParts[0] || "";
+            replyText = payloadParts.slice(1).join(" ") || "";
+        }
+
         if (commandName === "start") {
             sendTelegramNotification(
                 `🤖 <b>Obsidian Warden Bot Online</b>\nBridge server is active and running.\n\nType /instructionshowtoreply for instructions on how to interact.`
@@ -113,15 +116,6 @@ app.post('/telegram-webhook', (req, res) => {
                 `📖 <b>Instruction Guide</b>\n\nAll broadcasts and suggestions are routed directly to this group feed. Check the attached user IDs on broadcast cards to review inputs.`
             );
             return res.sendStatus(200);
-        }
-
-        let targetUser = "";
-        let replyText = commandPayload;
-
-        if (commandName === "replytosuggest" || commandName === "reply") {
-            const payloadParts = commandPayload.trim().split(" ");
-            targetUser = payloadParts[0] || "";
-            replyText = payloadParts.slice(1).join(" ") || "";
         }
 
         const broadcastPayload = JSON.stringify({
@@ -286,7 +280,7 @@ wss.on('connection', (ws) => {
                     `💡 <b>NEW TELEGRAM BROADCAST / SUGGESTION</b>\n` +
                     `👤 <b>User:</b> ${safeName} (ID: <code>${safeUserId}</code>)\n` +
                     `📝 <b>Message:</b> ${safeMessage}\n` +
-                    `💬 <a href="https://t.me/Obsidian_WardenBot?start=reply_${safeUserId}">Click here to Reply to ${safeName}</a>`;
+                    `ℹ️ <i>Type /instructionshowtoreply for guidance.</i>`; //where does this connect?
 
                 sendTelegramNotification(telegramFormattedText);
             } catch (e) {
