@@ -61,45 +61,8 @@ function sendTelegramNotification(htmlMessage, replyMarkup = null) {
             try {
                 const data = JSON.parse(responseBody);
                 console.log("Telegram Response:", data);
-
                 if (!data.ok) {
                     console.error("Telegram API Error Details:", data);
-                    const plainMessage = htmlMessage.replace(/<[^>]*>?/gm, '');
-                    const fallbackData = JSON.stringify({
-                        chat_id: chatId,
-                        text: plainMessage,
-                        ...(replyMarkup ? { reply_markup: replyMarkup } : {})
-                    });
-
-                    const fallbackOptions = {
-                        hostname: 'api.telegram.org',
-                        port: 443,
-                        path: `/bot${TelegramToken}/sendMessage`,
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Content-Length': Buffer.byteLength(fallbackData)
-                        }
-                    };
-
-                    const fallbackReq = https.request(fallbackOptions, (fallbackRes) => {
-                        let fallbackBody = '';
-                        fallbackRes.on('data', (chunk) => { fallbackBody += chunk; });
-                        fallbackRes.on('end', () => {
-                            try {
-                                console.log("Telegram Fallback Response:", JSON.parse(fallbackBody));
-                            } catch (e) {
-                                console.error("Failed to parse Telegram fallback response:", fallbackBody);
-                            }
-                        });
-                    });
-
-                    fallbackReq.on('error', (err) => {
-                        console.error("Telegram Fallback Dispatch Error:", err.message);
-                    });
-
-                    fallbackReq.write(fallbackData);
-                    fallbackReq.end();
                 }
             } catch (e) {
                 console.error("Failed to parse Telegram response:", responseBody);
@@ -173,13 +136,11 @@ app.post('/telegram-webhook', (req, res) => {
 });
 
 wss.on('connection', (ws) => {
-    // Default fallback room assignment
     ws.room = 'EN';
     
     ws.on('message', (data) => {
         const msg = data.toString();
 
-        // Handle JOIN (Sets the room channel and roles for the socket)
         if (msg.startsWith("JOIN:")) {
             const parts = msg.split(":");
             ws.room = parts[1];
@@ -189,7 +150,6 @@ wss.on('connection', (ws) => {
             return;
         }
 
-        // Handle SYSTEM_SWITCH (Handles channel switching for Global/Server commands)
         if (msg.startsWith("SYSTEM_SWITCH|")) {
             const parts = msg.split("|");
             const newRoom = parts[1];
@@ -200,7 +160,6 @@ wss.on('connection', (ws) => {
             return;
         }
 
-        // Handle PRIVATE ROOM Logic
         if (msg.startsWith("JOIN_PRIVATE|")) {
             const parts = msg.split("|");
             ws.room = "Private_" + parts[1];
@@ -209,7 +168,6 @@ wss.on('connection', (ws) => {
             return;
         }
 
-        // Handle CREATE_PRIVATE Logic
         if (msg.startsWith("CREATE_PRIVATE|")) {
             const playerName = msg.split("|")[1];
             ws.room = "Private_" + playerName;
@@ -218,14 +176,12 @@ wss.on('connection', (ws) => {
             return;
         }
 
-        // Handle GLOBAL_SET_LIMIT Logic
         if (msg.startsWith("GLOBAL_SET_LIMIT|")) {
             const limit = msg.split("|")[1];
             console.log(`Global limit set to: ${limit}`);
             return;
         }
 
-        // Handle SECRET Broadcast
         if (msg.startsWith("SECRET|")) {
             wss.clients.forEach((client) => {
                 if (client.readyState === WebSocket.OPEN && client.room === ws.room) {
@@ -235,7 +191,6 @@ wss.on('connection', (ws) => {
             return;
         }
 
-        // Handle Global View Request
         if (msg === "GET_GLOBAL_USERS") {
             let globalUsers = [];
             wss.clients.forEach((client) => {
@@ -249,7 +204,6 @@ wss.on('connection', (ws) => {
             return;
         }
 
-        // Handle Online Users Request
         if (msg.startsWith("GET_ONLINE_USERS|")) {
             let onlineNames = [];
             wss.clients.forEach((client) => {
@@ -263,10 +217,6 @@ wss.on('connection', (ws) => {
             ws.send("ONLINE_USERS_RESPONSE|" + (onlineNames.length > 0 ? onlineNames.join(", ") : "None"));
             return;
         }
-
-        // ==========================================
-        // ISOLATED SYSTEM MODULE (SYSTEM_ONLY ROOM)
-        // ==========================================
         
         if (msg.includes("ObsidianHandshake")) {
             try {
@@ -337,10 +287,6 @@ wss.on('connection', (ws) => {
                 return;
             }
         }
-
-        // ==========================================
-        // STANDARD CHAT BROADCAST ENGINE (LOCAL ROOM)
-        // ==========================================
         
         wss.clients.forEach((client) => {
             if (client.readyState === WebSocket.OPEN && client.room === ws.room && ws.room !== "SYSTEM_ONLY") {
