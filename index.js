@@ -11,10 +11,18 @@ const wss = new WebSocket.Server({ server });
 const SECONDARY_URL = "https://bridgeserver1-ydt4.onrender.com";
 
 app.post('/push-to-roblox', (req, res) => {
-    const broadcastPayload = JSON.stringify(req.body);
+    const senderName = req.body.playerName;
+    const broadcastPayload = JSON.stringify({
+        Type: "TelegramBroadcast",
+        PlayerName: req.body.playerName,
+        Message: req.body.message
+    });
+
     wss.clients.forEach((client) => {
         if (client.readyState === WebSocket.OPEN) {
-            client.send(broadcastPayload);
+            if (client.playerName !== senderName) {
+                client.send(broadcastPayload);
+            }
         }
     });
     res.sendStatus(200);
