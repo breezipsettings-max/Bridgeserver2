@@ -252,7 +252,7 @@ wss.on('connection', (ws) => {
             return;
         }
         
-        if (msg.includes("TelegramBroadcast") || msg.includes("ObsidianSuggest")) {
+            if (msg.includes("TelegramBroadcast") || msg.includes("ObsidianSuggest")) {
             try {
                 const packet = typeof msg === 'string' ? JSON.parse(msg) : msg;
                 const messageText = packet.Message || packet.Suggestion || "No message content provided";
@@ -266,7 +266,8 @@ wss.on('connection', (ws) => {
                     `💡 <b>NEW TELEGRAM BROADCAST / SUGGESTION</b>\n` +
                     `👤 <b>User:</b> ${safeName} (ID: <code>${safeUserId}</code>)\n` +
                     `📝 <b>Message:</b> ${safeMessage}\n` +
-                    
+                    `💬 <a href="https://t.me/Obsidian_WardenBot?start=reply_${safeUserId}">Click here to Reply to ${safeName}</a>`;
+
                 sendTelegramNotification(telegramFormattedText);
             } catch (e) {
                 console.error("Message Parse Error:", e.message);
