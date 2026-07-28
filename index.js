@@ -266,7 +266,7 @@ wss.on('connection', (ws) => {
                     `💡 <b>NEW TELEGRAM BROADCAST / SUGGESTION</b>\n` +
                     `👤 <b>User:</b> ${safeName} (ID: <code>${safeUserId}</code>)\n` +
                     `📝 <b>Message:</b> ${safeMessage}\n` +
-                    `💬 <a href="https://t.me/Obsidian_WardenBot">Click here to Reply to Suggestion</a>`;
+                    `💬 <a href="https://t.me/Obsidian_WardenBot?start=reply_${safeUserId}">Click here to Reply to ${safeName}</a>`;
 
                 sendTelegramNotification(telegramFormattedText);
             } catch (e) {
