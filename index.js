@@ -116,13 +116,24 @@ app.post('/telegram-webhook', (req, res) => {
             return res.sendStatus(200);
         }
 
+        let targetUser = "";
+        let replyText = commandPayload;
+
+        if (commandName === "reply") {
+            const payloadParts = commandPayload.trim().split(" ");
+            targetUser = payloadParts[0] || "";
+            replyText = payloadParts.slice(1).join(" ") || "";
+        }
+
         const broadcastPayload = JSON.stringify({
             Type: "TelegramCommand",
             Command: commandName,
             Sender: senderName,
             UserId: senderUserId,
             Message: telegramText,
-            Payload: commandPayload
+            Payload: commandPayload,
+            TargetUser: targetUser,
+            ReplyText: replyText
         });
 
         wss.clients.forEach((client) => {
