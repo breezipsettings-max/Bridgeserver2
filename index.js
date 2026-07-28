@@ -171,39 +171,6 @@ wss.on('connection', (ws) => {
         }
 
         // ==========================================
-        // TELEGRAM / OBSIDIAN SUGGEST FORWARDER
-        // ==========================================
-        if (msg.includes("TelegramBroadcast") || msg.includes("ObsidianSuggest")) {
-            try {
-                const packet = JSON.parse(msg);
-                const messageText = packet.Message || packet.Suggestion || "No content";
-                const rawName = packet.PlayerName || ws.playerName || 'Unknown';
-                const safeUserId = String(packet.UserId || ws.userId || 'N/A');
-
-                console.log(`Forwarding suggestion from ${rawName} to Secondary Server...`);
-
-                const response = await fetch(`${SECONDARY_URL}/send-to-telegram`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        playerName: rawName,
-                        userId: safeUserId,
-                        message: messageText
-                    })
-                });
-
-                if (!response.ok) {
-                    console.error(`Secondary server responded with status: ${response.status}`);
-                } else {
-                    console.log("Successfully forwarded to Secondary Server!");
-                }
-            } catch (e) {
-                console.error("CRITICAL ERROR in Server 1 Telegram forwarder:", e);
-            }
-            return;
-        }
-
-        // ==========================================
         // STANDARD CHAT BROADCAST ENGINE (LOCAL ROOM)
         // ==========================================
         wss.clients.forEach((client) => {
