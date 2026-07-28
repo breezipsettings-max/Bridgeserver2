@@ -114,7 +114,9 @@ wss.on('connection', (ws) => {
                         }));
                     }
                 });
-            } catch (e) {}
+            } catch (e) {
+                console.error("Error parsing ObsidianHandshake packet:", e);
+            }
             return;
         }
 
@@ -128,7 +130,9 @@ wss.on('connection', (ws) => {
                         }
                     });
                 }
-            } catch (e) {}
+            } catch (e) {
+                console.error("Error parsing DevHatSync packet:", e);
+            }
             return;
         }
 
@@ -141,7 +145,7 @@ wss.on('connection', (ws) => {
 
                 console.log(`Forwarding suggestion from ${rawName} to Secondary Server...`);
 
-                await fetch(`${SECONDARY_URL}/send-to-telegram`, {
+                const response = await fetch(`${SECONDARY_URL}/send-to-telegram`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -150,8 +154,14 @@ wss.on('connection', (ws) => {
                         message: messageText
                     })
                 });
+
+                if (!response.ok) {
+                    console.error(`Secondary server responded with status: ${response.status}`);
+                } else {
+                    console.log("Successfully forwarded to Secondary Server!");
+                }
             } catch (e) {
-                console.error("Failed to forward suggestion to Secondary Server:", e.message);
+                console.error("CRITICAL ERROR in Server 1 Telegram forwarder:", e);
             }
             return;
         }
