@@ -1,6 +1,5 @@
 const WebSocket = require('ws');
 const http = require('http');
-const https = require('https');
 const express = require('express');
 
 const app = express();
@@ -16,13 +15,13 @@ const wss = new WebSocket.Server({ server });
 const TelegramToken = "8890131325:AAG2SAW8cG1x8yH2U-uyHfPtrmsyNpcvb9w";
 const TelegramChatId = "-5308116981";
 
-// Owner Verification
+// Owner/Admin configuration
 const OwnerUserId = 9271966310;
 
-// Server-side cache for user platform tracking and targeted session mapping
-const HandshakePlatformCache = {};
+// Active state trackers
 const connectedClients = {};
 const adminActiveTargets = {};
+const HandshakePlatformCache = {};
 
 function escapeHTML(str) {
     if (!str) return '';
@@ -32,38 +31,15 @@ function escapeHTML(str) {
         .replace(/>/g, '&gt;');
 }
 
-async function sendTelegramNotification(htmlMessage, replyMarkup = null, targetChatId = TelegramChatId) {
-    if (!TelegramToken || !targetChatId) {
-        return;
-    }
+async function sendTelegramNotification(htmlMessage, targetChatId = TelegramChatId) {
+    if (!TelegramToken || !targetChatId) return;
 
     const chatId = String(targetChatId).trim();
-    let url = `https://api.telegram.org/bot${TelegramToken}/sendMessage?chat_id=${chatId}&text=${encodeURIComponent(htmlMessage)}&parse_mode=HTML`;
-
-    if (replyMarkup) {
-        url += `&reply_markup=${encodeURIComponent(JSON.stringify(replyMarkup))}`;
-    }
+    const url = `https://api.telegram.org/bot${TelegramToken}/sendMessage?chat_id=${chatId}&text=${encodeURIComponent(htmlMessage)}&parse_mode=HTML`;
 
     try {
         if (typeof fetch !== 'undefined') {
-            const response = await fetch(url, { method: 'POST' });
-            const data = await response.json();
-            console.log("Telegram Response:", data);
-
-            if (!data.ok) {
-                console.error("Telegram API Error Details:", data);
-                const plainMessage = htmlMessage.replace(/<[^>]*>?/gm, '');
-                let fallbackUrl = `https://api.telegram.org/bot${TelegramToken}/sendMessage?chat_id=${chatId}&text=${encodeURIComponent(plainMessage)}`;
-                
-                if (replyMarkup) {
-                    fallbackUrl += `&reply_markup=${encodeURIComponent(JSON.stringify(replyMarkup))}`;
-                }
-
-                const fallbackResponse = await fetch(fallbackUrl, { method: 'POST' });
-                const fallbackData = await fallbackResponse.json();
-                console.log("Telegram Fallback Response:", fallbackData);
-            }
-            return;
+            await fetch(url, { method: 'POST' });
         }
     } catch (err) {
         console.error("Telegram Dispatch Error:", err.message);
@@ -79,9 +55,16 @@ app.post('/telegram-webhook', (req, res) => {
         const lastName = message.from.last_name || "";
         const senderName = `${firstName} ${lastName}`.trim();
         const senderUserId = message.from.id;
+
+        // Security check enforcing owner/admin validation
+        if (OwnerUserId && senderUserId !== OwnerUserId) {
+            console.log(`Unauthorized webhook access attempt from User ID: ${senderUserId}`);
+            return res.sendStatus(200);
+        }
+
         const telegramText = message.text;
 
-        console.log(`Received from Telegram (${senderName}): ${telegramText}`);
+        console.log(`Received from Telegram (${senderName} [${senderUserId}]): ${telegramText}`);
 
         let commandName = "";
         let commandPayload = telegramText;
@@ -96,6 +79,25 @@ app.post('/telegram-webhook', (req, res) => {
             commandPayload = parts.slice(1).join(" ");
         }
 
+        // Handle Deep Link /start reply_<userId> vs Native /start
+        if (commandName === "start") {
+            if (commandPayload.startsWith("reply_")) {
+                const targetUserId = commandPayload.replace("reply_", "").trim();
+                adminActiveTargets[senderUserId] = targetUserId;
+                sendTelegramNotification(
+                    `🟢 <b>Target Locked</b>\nYou are now targeting User ID: <code>${targetUserId}</code>.\nType your message below to send it directly to them.`,
+                    senderUserId
+                );
+            } else {
+                const currentActive = adminActiveTargets[senderUserId] ? `Currently locked target ID: <code>${adminActiveTargets[senderUserId]}</code>` : `No active target locked. Click a suggestion link in your broadcast feed to target a player.`;
+                sendTelegramNotification(
+                    `🤖 <b>Obsidian Warden Bot Online</b>\nBridge server is active and running.\n\n${currentActive}`,
+                    senderUserId
+                );
+            }
+            return res.sendStatus(200);
+        }
+
         let targetUser = "";
         let replyText = commandPayload;
 
@@ -103,8 +105,37 @@ app.post('/telegram-webhook', (req, res) => {
             const payloadParts = commandPayload.trim().split(" ");
             targetUser = payloadParts[0] || "";
             replyText = payloadParts.slice(1).join(" ") || "";
+        } else if (message.reply_to_message && message.reply_to_message.text) {
+            const repliedText = message.reply_to_message.text;
+            const match = repliedText.match(/ID:\s*<code>(\d+)<\/code>/);
+            if (match && match[1]) {
+                targetUser = match[1];
+                replyText = telegramText;
+            }
+        } else if (adminActiveTargets[senderUserId]) {
+            targetUser = adminActiveTargets[senderUserId];
+            replyText = telegramText;
         }
 
+        // Optional direct targeted socket push if connected
+        if (targetUser && replyText) {
+            const targetWs = connectedClients[targetUser];
+            if (targetWs && targetWs.readyState === WebSocket.OPEN) {
+                const directPayload = JSON.stringify({
+                    Type: "AdminDirectReply",
+                    Sender: senderName,
+                    AdminId: senderUserId,
+                    Message: replyText
+                });
+                targetWs.send(directPayload);
+                sendTelegramNotification(`✅ Reply successfully sent to user ID <code>${targetUser}</code>.`, senderUserId);
+                console.log(`Targeted reply routed to user ID ${targetUser}: ${replyText}`);
+            } else {
+                sendTelegramNotification(`⚠️ User ID <code>${targetUser}</code> is currently offline or not connected.`, senderUserId);
+            }
+        }
+
+        // Always broadcast TelegramCommand globally so client scripts receive updates reliably
         const broadcastPayload = JSON.stringify({
             Type: "TelegramCommand",
             Command: commandName,
@@ -139,6 +170,10 @@ wss.on('connection', (ws) => {
             ws.room = parts[1];
             ws.playerName = parts[2];
             ws.role = parts[3] || "CHAT"; 
+            if (parts[4]) {
+                ws.userId = Number(parts[4]);
+                connectedClients[String(ws.userId)] = ws;
+            }
             console.log(`${ws.playerName} joined room: [${ws.room}] as ${ws.role}`);
             return;
         }
@@ -258,7 +293,7 @@ wss.on('connection', (ws) => {
         
         if (msg.includes("TelegramBroadcast") || msg.includes("ObsidianSuggest")) {
             try {
-                const packet = JSON.parse(msg);
+                const packet = typeof msg === 'string' ? JSON.parse(msg) : msg;
                 const messageText = packet.Message || packet.Suggestion || "No message content provided";
 
                 const rawName = packet.PlayerName || ws.playerName || 'Unknown';
