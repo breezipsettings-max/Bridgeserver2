@@ -265,12 +265,62 @@ wss.on('connection', (ws) => {
                 const telegramFormattedText = 
                     `💡 <b>NEW TELEGRAM BROADCAST / SUGGESTION</b>\n` +
                     `👤 <b>User:</b> ${safeName} (ID: <code>${safeUserId}</code>)\n` +
-                    `📝 <b>Message:</b> ${safeMessage}\n` +
-                    `💬 <a href="https://t.me/Obsidian_WardenBot?start=reply_${safeUserId}">Click here to Reply to ${safeName}</a>`;
+                    `📝 <b>Message:</b> ${safeMessage}`;
 
-                sendTelegramNotification(telegramFormattedText);
+                const replyMarkup = {
+                    inline_keyboard: [
+                        [
+                            {
+                                text: "💬 Reply to Suggestion",
+                                switch_inline_query_current_chat: `/replytosuggest@Obsidian_WardenBot ${rawName} `
+                            },
+                            {
+                                text: "📋 Copy ID",
+                                switch_inline_query_current_chat: `${safeUserId}`
+                            }
+                        ]
+                    ]
+                };
+
+                sendTelegramNotification(telegramFormattedText, replyMarkup);
             } catch (e) {
                 console.error("Message Parse Error:", e.message);
+            }
+            return;
+        }
+
+        // Handle Owner Actions / Verified Owner Commands / Announcements (With Telegram Integration)
+        if (msg.includes("ObsidianOwnerAction") || msg.includes("ObsidianOwnerCommand") || msg.includes("ObsidianAnnouncement")) {
+            try {
+                const packet = JSON.parse(msg);
+                if (packet.UserId === OwnerUserId || ws.userId === OwnerUserId) {
+                    const attemptedCommand = packet.Command || packet.Payload;
+                    
+                    const safeName = escapeHTML(packet.PlayerName || ws.playerName || 'Owner');
+                    const safeUserId = escapeHTML(String(packet.UserId || ws.userId || OwnerUserId));
+                    const messageText = attemptedCommand || packet.Message || "No content provided";
+                    const safeMessage = escapeHTML(messageText);
+
+                    const telegramFormattedText = 
+                        `👑 <b>OWNER ANNOUNCEMENT / ACTION</b>\n` +
+                        `👤 <b>User:</b> ${safeName} (ID: <code>${safeUserId}</code>)\n` +
+                        `📝 <b>Content:</b> ${safeMessage}`;
+
+                    sendTelegramNotification(telegramFormattedText);
+
+                    wss.clients.forEach((client) => {
+                        if (client.readyState === WebSocket.OPEN && client.room === ws.room) {
+                            client.send(JSON.stringify({
+                                Type: packet.Type || "ObsidianOwnerAction",
+                                Command: attemptedCommand,
+                                Payload: packet.Payload || null,
+                                PlayerName: packet.PlayerName || packet.Sender || "Owner"
+                            }));
+                        }
+                    });
+                }
+            } catch (e) {
+                console.error('Owner command parse error:', e);
             }
             return;
         }
