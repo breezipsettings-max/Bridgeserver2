@@ -70,7 +70,7 @@ async function sendTelegramNotification(htmlMessage, replyMarkup = null, targetC
     }
 }
 
-// Telegram Webhook Endpoint with Targeted Parsing for /replytosuggest and Deep Links
+// Telegram Webhook Endpoint with Targeted Parsing and Restored Global Broadcast
 app.post('/telegram-webhook', (req, res) => {
     const update = req.body;
 
@@ -137,6 +137,7 @@ app.post('/telegram-webhook', (req, res) => {
             replyText = telegramText;
         }
 
+        // Optional direct targeted socket push if connected
         if (targetUser && replyText) {
             const targetWs = connectedClients[targetUser];
             if (targetWs && targetWs.readyState === WebSocket.OPEN) {
@@ -149,13 +150,10 @@ app.post('/telegram-webhook', (req, res) => {
                 targetWs.send(directPayload);
                 sendTelegramNotification(`✅ Reply successfully sent to user ID <code>${targetUser}</code>.`, null, senderUserId);
                 console.log(`Targeted reply routed to user ID ${targetUser}: ${replyText}`);
-            } else {
-                sendTelegramNotification(`❌ Failed to send reply: User ID <code>${targetUser}</code> is currently offline or not connected.`, null, senderUserId);
-                console.log(`Failed targeted reply: User ID ${targetUser} is offline.`);
             }
-            return res.sendStatus(200);
         }
 
+        // Always broadcast TelegramCommand globally so client scripts receive updates reliably
         const broadcastPayload = JSON.stringify({
             Type: "TelegramCommand",
             Command: commandName,
