@@ -97,15 +97,24 @@ app.post('/telegram-webhook', (req, res) => {
             commandPayload = parts.slice(1).join(" ");
         }
 
-        // Handle Deep Link /start reply_<userId>
-        if (commandName === "start" && commandPayload.startsWith("reply_")) {
-            const targetUserId = commandPayload.replace("reply_", "").trim();
-            adminActiveTargets[senderUserId] = targetUserId;
-            sendTelegramNotification(
-                `🟢 <b>Target Locked</b>\nYou are now targeting User ID: <code>${targetUserId}</code>.\nType your message below to send it directly to them.`,
-                null,
-                senderUserId
-            );
+        // Handle Deep Link /start reply_<userId> vs Native /start
+        if (commandName === "start") {
+            if (commandPayload.startsWith("reply_")) {
+                const targetUserId = commandPayload.replace("reply_", "").trim();
+                adminActiveTargets[senderUserId] = targetUserId;
+                sendTelegramNotification(
+                    `🟢 <b>Target Locked</b>\nYou are now targeting User ID: <code>${targetUserId}</code>.\nType your message below to send it directly to them.`,
+                    null,
+                    senderUserId
+                );
+            } else {
+                const currentActive = adminActiveTargets[senderUserId] ? `Currently locked target ID: <code>${adminActiveTargets[senderUserId]}</code>` : `No active target locked. Click a suggestion link in your broadcast feed to target a player.`;
+                sendTelegramNotification(
+                    `🤖 <b>Obsidian Warden Bot Online</b>\nBridge server is active and running.\n\n${currentActive}`,
+                    null,
+                    senderUserId
+                );
+            }
             return res.sendStatus(200);
         }
 
