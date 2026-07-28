@@ -70,7 +70,6 @@ async function sendTelegramNotification(htmlMessage, replyMarkup = null, targetC
     }
 }
 
-// Telegram Webhook Endpoint with Targeted Parsing and Restored Global Broadcast
 app.post('/telegram-webhook', (req, res) => {
     const update = req.body;
 
@@ -80,16 +79,9 @@ app.post('/telegram-webhook', (req, res) => {
         const lastName = message.from.last_name || "";
         const senderName = `${firstName} ${lastName}`.trim();
         const senderUserId = message.from.id;
-
-        // Security check enforcing owner/admin validation
-        if (OwnerUserId && senderUserId !== OwnerUserId) {
-            console.log(`Unauthorized webhook access attempt from User ID: ${senderUserId}`);
-            return res.sendStatus(200);
-        }
-
         const telegramText = message.text;
 
-        console.log(`Received from Telegram (${senderName} [${senderUserId}]): ${telegramText}`);
+        console.log(`Received from Telegram (${senderName}): ${telegramText}`);
 
         let commandName = "";
         let commandPayload = telegramText;
@@ -104,27 +96,6 @@ app.post('/telegram-webhook', (req, res) => {
             commandPayload = parts.slice(1).join(" ");
         }
 
-        // Handle Deep Link /start reply_<userId> vs Native /start
-        if (commandName === "start") {
-            if (commandPayload.startsWith("reply_")) {
-                const targetUserId = commandPayload.replace("reply_", "").trim();
-                adminActiveTargets[senderUserId] = targetUserId;
-                sendTelegramNotification(
-                    `🟢 <b>Target Locked</b>\nYou are now targeting User ID: <code>${targetUserId}</code>.\nType your message below to send it directly to them.`,
-                    null,
-                    senderUserId
-                );
-            } else {
-                const currentActive = adminActiveTargets[senderUserId] ? `Currently locked target ID: <code>${adminActiveTargets[senderUserId]}</code>` : `No active target locked. Click a suggestion link in your broadcast feed to target a player.`;
-                sendTelegramNotification(
-                    `🤖 <b>Obsidian Warden Bot Online</b>\nBridge server is active and running.\n\n${currentActive}`,
-                    null,
-                    senderUserId
-                );
-            }
-            return res.sendStatus(200);
-        }
-
         let targetUser = "";
         let replyText = commandPayload;
 
@@ -132,37 +103,8 @@ app.post('/telegram-webhook', (req, res) => {
             const payloadParts = commandPayload.trim().split(" ");
             targetUser = payloadParts[0] || "";
             replyText = payloadParts.slice(1).join(" ") || "";
-        } else if (message.reply_to_message && message.reply_to_message.text) {
-            const repliedText = message.reply_to_message.text;
-            const match = repliedText.match(/ID:\s*<code>(\d+)<\/code>/);
-            if (match && match[1]) {
-                targetUser = match[1];
-                replyText = telegramText;
-            }
-        } else if (adminActiveTargets[senderUserId]) {
-            targetUser = adminActiveTargets[senderUserId];
-            replyText = telegramText;
         }
 
-        // Optional direct targeted socket push if connected
-        if (targetUser && replyText) {
-            const targetWs = connectedClients[targetUser];
-            if (targetWs && targetWs.readyState === WebSocket.OPEN) {
-                const directPayload = JSON.stringify({
-                    Type: "AdminDirectReply",
-                    Sender: senderName,
-                    AdminId: senderUserId,
-                    Message: replyText
-                });
-                targetWs.send(directPayload);
-                sendTelegramNotification(`✅ Reply successfully sent to user ID <code>${targetUser}</code>.`, null, senderUserId);
-                console.log(`Targeted reply routed to user ID ${targetUser}: ${replyText}`);
-            } else {
-                sendTelegramNotification(`⚠️ User ID <code>${targetUser}</code> is currently offline or not connected.`, null, senderUserId);
-            }
-        }
-
-        // Always broadcast TelegramCommand globally so client scripts receive updates reliably
         const broadcastPayload = JSON.stringify({
             Type: "TelegramCommand",
             Command: commandName,
