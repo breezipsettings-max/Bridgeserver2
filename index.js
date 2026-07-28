@@ -1,6 +1,5 @@
 const WebSocket = require('ws');
 const http = require('http');
-const https = https;
 const express = require('express');
 
 const app = express();
@@ -119,7 +118,7 @@ app.post('/telegram-webhook', (req, res) => {
         let targetUser = "";
         let replyText = commandPayload;
 
-        if (commandName === "reply") {
+        if (commandName === "replytosuggest" || commandName === "reply") {
             const payloadParts = commandPayload.trim().split(" ");
             targetUser = payloadParts[0] || "";
             replyText = payloadParts.slice(1).join(" ") || "";
@@ -287,7 +286,7 @@ wss.on('connection', (ws) => {
                     `💡 <b>NEW TELEGRAM BROADCAST / SUGGESTION</b>\n` +
                     `👤 <b>User:</b> ${safeName} (ID: <code>${safeUserId}</code>)\n` +
                     `📝 <b>Message:</b> ${safeMessage}\n` +
-                    `ℹ️ <i>Type /instructionshowtoreply for guidance.</i>`;
+                    `💬 <a href="https://t.me/Obsidian_WardenBot?start=reply_${safeUserId}">Click here to Reply to ${safeName}</a>`;
 
                 sendTelegramNotification(telegramFormattedText);
             } catch (e) {
