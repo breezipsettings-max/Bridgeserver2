@@ -183,7 +183,7 @@ wss.on('connection', (ws) => {
 
                 console.log(`Forwarding suggestion from ${rawName} to Secondary Server...`);
 
-                await fetch(`${SECONDARY_URL}/send-to-telegram`, {
+                const response = await fetch(`${SECONDARY_URL}/send-to-telegram`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -192,6 +192,12 @@ wss.on('connection', (ws) => {
                         message: messageText
                     })
                 });
+
+                if (!response.ok) {
+                    console.error(`Secondary server error status: ${response.status}`);
+                } else {
+                    console.log("Successfully delivered suggestion to Secondary Server!");
+                }
             } catch (e) {
                 console.error("Failed to forward suggestion to Secondary Server:", e.message);
             }
