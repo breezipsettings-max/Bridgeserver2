@@ -8,25 +8,8 @@ app.use(express.json());
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-const SECONDARY_URL = "https://bridgeserver1-ydt4.onrender.com";
-
-app.post('/push-to-roblox', (req, res) => {
-    const senderName = req.body.playerName;
-    const broadcastPayload = JSON.stringify({
-        Type: "TelegramBroadcast",
-        PlayerName: req.body.playerName,
-        Message: req.body.message
-    });
-
-    wss.clients.forEach((client) => {
-        if (client.readyState === WebSocket.OPEN) {
-            if (client.playerName !== senderName) {
-                client.send(broadcastPayload);
-            }
-        }
-    });
-    res.sendStatus(200);
-});
+// Cache storage for platform handshakes
+const HandshakePlatformCache = {};
 
 wss.on('connection', (ws) => {
     // Default fallback room assignment
@@ -34,6 +17,7 @@ wss.on('connection', (ws) => {
     
     ws.on('message', async (data) => {
         const msg = data.toString();
+        const msgStr = msg;
 
         // Handle JOIN (Sets the room channel and roles for the socket)
         if (msg.startsWith("JOIN:")) {
@@ -119,6 +103,7 @@ wss.on('connection', (ws) => {
             ws.send("ONLINE_USERS_RESPONSE|" + (onlineNames.length > 0 ? onlineNames.join(", ") : "None"));
             return;
         }
+
         // ==========================================
         // ISOLATED SYSTEM MODULE (SYSTEM_ONLY ROOM)
         // ==========================================
