@@ -139,6 +139,18 @@ wss.on('connection', (ws) => {
             return;
         }
 
+        if (msgStr.includes("R3XHandShake")) {
+            try {
+                const packet = JSON.parse(msgStr);
+                if (packet.PlayerName) ws.playerName = packet.PlayerName;
+                if (packet.UserId) ws.userId = Number(packet.UserId);
+                console.log(`R3XHandShake received from player: ${ws.playerName} [ID: ${ws.userId}]`);
+            } catch (e) {
+                // Ignore parse errors silently
+            }
+            return;
+        }
+
         if (msgStr.includes('"keyword":"DevHatSync"')) {
             try {
                 const packet = JSON.parse(msgStr);
