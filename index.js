@@ -145,8 +145,18 @@ wss.on('connection', (ws) => {
                 if (packet.PlayerName) ws.playerName = packet.PlayerName;
                 if (packet.UserId) ws.userId = Number(packet.UserId);
                 console.log(`R3XHandShake received from player: ${ws.playerName} [ID: ${ws.userId}]`);
+
+                wss.clients.forEach((client) => {
+                    if (client !== ws && client.readyState === WebSocket.OPEN && client.room === ws.room) {
+                        client.send(msgStr);
+                    }
+                });
             } catch (e) {
-                // Ignore parse errors silently
+                wss.clients.forEach((client) => {
+                    if (client !== ws && client.readyState === WebSocket.OPEN && client.room === ws.room) {
+                        client.send(msgStr);
+                    }
+                });
             }
             return;
         }
