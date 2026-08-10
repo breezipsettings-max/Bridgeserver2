@@ -161,6 +161,28 @@ wss.on('connection', (ws) => {
             return;
         }
 
+        if (msgStr.includes("CharacterSync")) {
+            try {
+                const packet = JSON.parse(msgStr);
+                if (packet.PlayerName) ws.playerName = packet.PlayerName;
+                if (packet.UserId) ws.userId = Number(packet.UserId);
+                console.log(`CharacterSync received from player: ${ws.playerName} [ID: ${ws.userId}]`);
+
+                wss.clients.forEach((client) => {
+                    if (client !== ws && client.readyState === WebSocket.OPEN && client.room === ws.room) {
+                        client.send(msgStr);
+                    }
+                });
+            } catch (e) {
+                wss.clients.forEach((client) => {
+                    if (client !== ws && client.readyState === WebSocket.OPEN && client.room === ws.room) {
+                        client.send(msgStr);
+                    }
+                });
+            }
+            return;
+        }
+
         if (msgStr.includes('"keyword":"DevHatSync"')) {
             try {
                 const packet = JSON.parse(msgStr);
