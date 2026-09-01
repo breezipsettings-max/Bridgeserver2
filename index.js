@@ -137,6 +137,16 @@ wss.on('connection', (ws) => {
             try {
                 packet = JSON.parse(msgStr);
                 if (packet.type === "translate_request") {
+                    // Capture User ID and Player Name from the broadcast packet or active socket
+                    const userId = packet.userId || packet.UserId || ws.userId || "UnknownID";
+                    const playerName = packet.playerName || packet.PlayerName || ws.playerName || "UnknownPlayer";
+                    
+                    // Bind identity to the socket instance for future tracking
+                    if (packet.userId || packet.UserId) ws.userId = Number(userId);
+                    if (packet.playerName || packet.PlayerName) ws.playerName = playerName;
+
+                    console.log(`Translation request received from player [${playerName} | ID: ${userId}]: "${packet.text || packet.message}"`);
+
                     // Flexible mapping for target language and text fields
                     const rawTarget = packet.target || packet.outputLang || packet.OutputLang || packet.targetLang || "";
                     const targetLang = (rawTarget !== "") ? rawTarget : "en";
@@ -148,6 +158,8 @@ wss.on('connection', (ws) => {
                         ws.send(JSON.stringify({
                             type: "translation_response",
                             id: packet.id,
+                            userId: userId,
+                            playerName: playerName,
                             translated: translationCache[cacheKey].translated,
                             finalMessage: translationCache[cacheKey].translated,
                             sourceCode: translationCache[cacheKey].sourceCode,
@@ -181,9 +193,12 @@ wss.on('connection', (ws) => {
                         sourceCode: sourceCode
                     };
                     
+                    // Broadcast the translated text directly back to the player who sent it
                     ws.send(JSON.stringify({
                         type: "translation_response",
                         id: packet.id,
+                        userId: userId,
+                        playerName: playerName,
                         translated: finalTranslated,
                         finalMessage: finalTranslated,
                         sourceCode: sourceCode,
