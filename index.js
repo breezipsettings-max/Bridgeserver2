@@ -116,8 +116,10 @@ wss.on('connection', (ws) => {
             try {
                 packet = JSON.parse(msgStr);
                 if (packet.type === "translate_request") {
-                    const targetLang = packet.target || "en";
-                    const textToTranslate = packet.text || "";
+                    // Flexible mapping for target language and text fields
+                    const rawTarget = packet.target || packet.outputLang || packet.OutputLang || packet.targetLang || "";
+                    const targetLang = (rawTarget !== "") ? rawTarget : "en";
+                    const textToTranslate = packet.text || packet.message || "";
                     
                     // Check cache first to avoid rate-limiting
                     const cacheKey = `${targetLang}_${textToTranslate}`;
@@ -126,7 +128,9 @@ wss.on('connection', (ws) => {
                             type: "translation_response",
                             id: packet.id,
                             translated: translationCache[cacheKey].translated,
-                            sourceCode: translationCache[cacheKey].sourceCode
+                            finalMessage: translationCache[cacheKey].translated,
+                            sourceCode: translationCache[cacheKey].sourceCode,
+                            detectedSource: translationCache[cacheKey].sourceCode
                         }));
                         return;
                     }
@@ -160,7 +164,9 @@ wss.on('connection', (ws) => {
                         type: "translation_response",
                         id: packet.id,
                         translated: finalTranslated,
-                        sourceCode: sourceCode
+                        finalMessage: finalTranslated,
+                        sourceCode: sourceCode,
+                        detectedSource: sourceCode
                     }));
                 }
             } catch (e) {
@@ -174,7 +180,9 @@ wss.on('connection', (ws) => {
                         type: "translation_response",
                         id: packet ? packet.id : null,
                         translated: null,
-                        sourceCode: "unknown"
+                        finalMessage: null,
+                        sourceCode: "unknown",
+                        detectedSource: "unknown"
                     }));
                 } catch (err) {}
             }
