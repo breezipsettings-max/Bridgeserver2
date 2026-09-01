@@ -11,6 +11,9 @@ const wss = new WebSocket.Server({ server });
 // Cache storage for platform handshakes
 const HandshakePlatformCache = {};
 
+// Cache storage for translations to prevent Google 429 rate-limiting
+const translationCache = {};
+
 wss.on('connection', (ws) => {
     // Default fallback room assignment
     ws.room = 'EN';
@@ -116,6 +119,18 @@ wss.on('connection', (ws) => {
                     const targetLang = packet.target || "en";
                     const textToTranslate = packet.text || "";
                     
+                    // Check cache first to avoid rate-limiting
+                    const cacheKey = `${targetLang}_${textToTranslate}`;
+                    if (translationCache[cacheKey]) {
+                        ws.send(JSON.stringify({
+                            type: "translation_response",
+                            id: packet.id,
+                            translated: translationCache[cacheKey].translated,
+                            sourceCode: translationCache[cacheKey].sourceCode
+                        }));
+                        return;
+                    }
+                    
                     const translateUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${encodeURIComponent(targetLang)}&dt=t&q=${encodeURIComponent(textToTranslate)}`;
                     
                     const response = await fetch(translateUrl);
@@ -133,10 +148,18 @@ wss.on('connection', (ws) => {
                         sourceCode = translationData[2] || "unknown";
                     }
                     
+                    const finalTranslated = translated.trim();
+                    
+                    // Store in cache
+                    translationCache[cacheKey] = {
+                        translated: finalTranslated,
+                        sourceCode: sourceCode
+                    };
+                    
                     ws.send(JSON.stringify({
                         type: "translation_response",
                         id: packet.id,
-                        translated: translated.trim(),
+                        translated: finalTranslated,
                         sourceCode: sourceCode
                     }));
                 }
