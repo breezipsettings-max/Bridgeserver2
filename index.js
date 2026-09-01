@@ -14,9 +14,13 @@ const HandshakePlatformCache = {};
 // Cache storage for translations to prevent Google 429 rate-limiting
 const translationCache = {};
 
-// Express endpoint to serve or handle raw Google Translate json.txt format responses
+// Express endpoint to serve raw Google Translate json.txt format responses based on actual client input
 app.get('/json.txt', async (req, res) => {
-    const textToTranslate = req.query.text || "Test";
+    const textToTranslate = req.query.text;
+    if (!textToTranslate) {
+        return res.status(400).json({ error: "Missing text query parameter" });
+    }
+    
     const targetLang = req.query.target || "en";
     const translateUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${encodeURIComponent(targetLang)}&dt=t&q=${encodeURIComponent(textToTranslate)}`;
     
