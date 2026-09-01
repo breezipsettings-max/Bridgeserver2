@@ -14,6 +14,23 @@ const HandshakePlatformCache = {};
 // Cache storage for translations to prevent Google 429 rate-limiting
 const translationCache = {};
 
+// Express endpoint to serve or handle raw Google Translate json.txt format responses
+app.get('/json.txt', async (req, res) => {
+    const textToTranslate = req.query.text || "Test";
+    const targetLang = req.query.target || "en";
+    const translateUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${encodeURIComponent(targetLang)}&dt=t&q=${encodeURIComponent(textToTranslate)}`;
+    
+    try {
+        const response = await fetch(translateUrl);
+        const translationData = await response.json();
+        res.setHeader('Content-Type', 'application/json');
+        res.send(JSON.stringify(translationData));
+    } catch (e) {
+        console.error("json.txt endpoint error:", e);
+        res.status(500).json({ error: "Failed to fetch raw translation format" });
+    }
+});
+
 wss.on('connection', (ws) => {
     // Default fallback room assignment
     ws.room = 'EN';
@@ -171,14 +188,16 @@ wss.on('connection', (ws) => {
                 }
             } catch (e) {
                 console.error("Translation proxy error:", e);
-                const packetId = packet ? packet.id : null;
-                if (!packetId) {
-                    try { packet = JSON.parse(msgStr); } catch (err) {}
-                }
+                let packetId = null;
+                try {
+                    const parsed = JSON.parse(msgStr);
+                    packetId = parsed.id;
+                } catch (err) {}
+                
                 try {
                     ws.send(JSON.stringify({
                         type: "translation_response",
-                        id: packet ? packet.id : null,
+                        id: packetId,
                         translated: null,
                         finalMessage: null,
                         sourceCode: "unknown",
