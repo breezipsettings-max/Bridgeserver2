@@ -108,6 +108,56 @@ wss.on('connection', (ws) => {
         // ISOLATED SYSTEM MODULE (SYSTEM_ONLY ROOM)
         // ==========================================
         
+        if (msgStr.includes("translate_request")) {
+            let packet;
+            try {
+                packet = JSON.parse(msgStr);
+                if (packet.type === "translate_request") {
+                    const targetLang = packet.target || "en";
+                    const textToTranslate = packet.text || "";
+                    
+                    const translateUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${encodeURIComponent(targetLang)}&dt=t&q=${encodeURIComponent(textToTranslate)}`;
+                    
+                    const response = await fetch(translateUrl);
+                    const translationData = await response.json();
+                    
+                    let translated = "";
+                    let sourceCode = "unknown";
+                    
+                    if (translationData && translationData[0]) {
+                        for (const part of translationData[0]) {
+                            if (part && part[0]) {
+                                translated += part[0];
+                            }
+                        }
+                        sourceCode = translationData[2] || "unknown";
+                    }
+                    
+                    ws.send(JSON.stringify({
+                        type: "translation_response",
+                        id: packet.id,
+                        translated: translated.trim(),
+                        sourceCode: sourceCode
+                    }));
+                }
+            } catch (e) {
+                console.error("Translation proxy error:", e);
+                const packetId = packet ? packet.id : null;
+                if (!packetId) {
+                    try { packet = JSON.parse(msgStr); } catch (err) {}
+                }
+                try {
+                    ws.send(JSON.stringify({
+                        type: "translation_response",
+                        id: packet ? packet.id : null,
+                        translated: null,
+                        sourceCode: "unknown"
+                    }));
+                } catch (err) {}
+            }
+            return;
+        }
+
         if (msgStr.includes("ObsidianHandshake")) {
             try {
                 const packet = JSON.parse(msgStr);
