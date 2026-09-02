@@ -137,18 +137,21 @@ wss.on('connection', (ws) => {
             try {
                 packet = JSON.parse(msgStr);
                 if (packet.type === "translate_request") {
-                    // Capture User ID and Player Name from the broadcast packet or active socket
+                    // Capture User ID, Player Name, and Output Language from packet or active socket state
                     const userId = packet.userId || packet.UserId || ws.userId || "UnknownID";
                     const playerName = packet.playerName || packet.PlayerName || ws.playerName || "UnknownPlayer";
                     
-                    // Bind identity to the socket instance for future tracking
+                    // Bind identity and output language preferences to the socket instance for persistent tracking
                     if (packet.userId || packet.UserId) ws.userId = Number(userId);
                     if (packet.playerName || packet.PlayerName) ws.playerName = playerName;
+                    if (packet.outputLang || packet.OutputLang) {
+                        ws.outputLang = packet.outputLang || packet.OutputLang;
+                    }
 
-                    console.log(`Translation request received from player [${playerName} | ID: ${userId}]: "${packet.text || packet.message}"`);
+                    console.log(`Translation request received from player [${playerName} | ID: ${userId}]: "${packet.text || packet.message}" (Lang: ${ws.outputLang || packet.target || 'default'})`);
 
-                    // Flexible mapping for target language and text fields
-                    const rawTarget = packet.target || packet.outputLang || packet.OutputLang || packet.targetLang || "";
+                    // Flexible mapping prioritizing packet outputLang, OutputLang, target, then socket state fallback
+                    const rawTarget = packet.outputLang || packet.OutputLang || packet.target || ws.outputLang || "";
                     const targetLang = (rawTarget !== "") ? rawTarget : "en";
                     const textToTranslate = packet.text || packet.message || "";
                     
@@ -160,6 +163,7 @@ wss.on('connection', (ws) => {
                             id: packet.id,
                             userId: userId,
                             playerName: playerName,
+                            outputLang: targetLang,
                             translated: translationCache[cacheKey].translated,
                             finalMessage: translationCache[cacheKey].translated,
                             sourceCode: translationCache[cacheKey].sourceCode,
@@ -193,12 +197,13 @@ wss.on('connection', (ws) => {
                         sourceCode: sourceCode
                     };
                     
-                    // Broadcast the translated text directly back to the player who sent it
+                    // Broadcast the translated text directly back to the player who sent it with their output language confirmation
                     ws.send(JSON.stringify({
                         type: "translation_response",
                         id: packet.id,
                         userId: userId,
                         playerName: playerName,
+                        outputLang: targetLang,
                         translated: finalTranslated,
                         finalMessage: finalTranslated,
                         sourceCode: sourceCode,
