@@ -202,11 +202,9 @@ wss.on('connection', (ws) => {
             try {
                 packet = JSON.parse(msgStr);
                 if (packet.type === "translate_request") {
-                    // Capture User ID, Player Name, and Output Language from packet or active socket state
                     const userId = packet.userId || packet.UserId || ws.userId || "UnknownID";
                     const playerName = packet.playerName || packet.PlayerName || ws.playerName || "UnknownPlayer";
                     
-                    // Bind identity and output language preferences to the socket instance for persistent tracking
                     if (packet.userId || packet.UserId) ws.userId = Number(userId);
                     if (packet.playerName || packet.PlayerName) ws.playerName = playerName;
                     if (packet.outputLang || packet.OutputLang) {
@@ -215,12 +213,10 @@ wss.on('connection', (ws) => {
 
                     console.log(`Translation request received from player [${playerName} | ID: ${userId}]: "${packet.text || packet.message}" (Lang: ${ws.outputLang || packet.target || 'default'})`);
 
-                    // Flexible mapping prioritizing packet outputLang, OutputLang, target, then socket state fallback
                     const rawTarget = packet.outputLang || packet.OutputLang || packet.target || ws.outputLang || "";
                     const targetLang = (rawTarget !== "") ? rawTarget : "en";
                     const textToTranslate = packet.text || packet.message || "";
                     
-                    // Check cache first to avoid rate-limiting
                     const cacheKey = `${targetLang}_${textToTranslate}`;
                     if (translationCache[cacheKey]) {
                         console.log(`[WS Cache Hit]: ${textToTranslate} -> ${targetLang}`);
@@ -264,14 +260,12 @@ wss.on('connection', (ws) => {
                     
                     const finalTranslated = translated.trim();
                     
-                    // Store in cache
                     translationCache[cacheKey] = {
                         translated: finalTranslated,
                         sourceCode: sourceCode,
                         rawBody: translationData
                     };
                     
-                    // Broadcast the translated text directly back to the player who sent it with their output language confirmation
                     ws.send(JSON.stringify({
                         type: "translation_response",
                         id: packet.id,
@@ -386,14 +380,68 @@ wss.on('connection', (ws) => {
                 const packet = JSON.parse(msgStr);
                 if (packet.playerName) ws.playerName = packet.playerName;
                 if (packet.userId) ws.userId = Number(packet.userId);
-                console.log(`sign_broadcast received from player: ${ws.playerName} [Raw: "${packet.rawText}" -> Translated: "${packet.translatedText}"]`);
+                
+                const rawText = packet.rawText || "";
+                const targetLang = packet.targetLang || ws.outputLang || "en";
+                const cacheKey = `${targetLang}_${rawText}`;
+                
+                let finalTranslated = packet.translatedText || rawText;
+                let sourceCode = "unknown";
+                
+                if (rawText !== "") {
+                    if (translationCache[cacheKey]) {
+                        finalTranslated = translationCache[cacheKey].translated;
+                        sourceCode = translationCache[cacheKey].sourceCode;
+                        console.log(`[Server WS Cache Hit]: "${rawText}" -> "${finalTranslated}" (${targetLang})`);
+                    } else {
+                        const translateUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${encodeURIComponent(targetLang)}&dt=t&q=${encodeURIComponent(rawText)}`;
+                        try {
+                            const response = await fetch(translateUrl, { headers: requestHeaders });
+                            if (response.status !== 429) {
+                                const translationData = await response.json();
+                                let translated = "";
+                                if (translationData && translationData[0]) {
+                                    for (const part of translationData[0]) {
+                                        if (part && part[0]) {
+                                            translated += part[0];
+                                        }
+                                    }
+                                    sourceCode = translationData[2] || "unknown";
+                                }
+                                finalTranslated = translated.trim() || rawText;
+                                translationCache[cacheKey] = {
+                                    translated: finalTranslated,
+                                    sourceCode: sourceCode,
+                                    rawBody: translationData
+                                };
+                                console.log(`[Server Translated]: "${rawText}" -> "${finalTranslated}" [Source: ${sourceCode}]`);
+                            } else {
+                                console.error("CRITICAL: Server rate-limited by Google Translate during sign_broadcast!");
+                            }
+                        } catch (err) {
+                            console.error("Server-side sign translation fetch error:", err);
+                        }
+                    }
+                }
+
+                const broadcastPacket = JSON.stringify({
+                    type: "sign_broadcast",
+                    playerName: ws.playerName,
+                    displayName: packet.displayName || ws.playerName,
+                    rawText: rawText,
+                    translatedText: finalTranslated,
+                    sourceCode: sourceCode
+                });
+
+                console.log(`sign_broadcast broadcasted from player: ${ws.playerName} [Raw: "${rawText}" -> Translated: "${finalTranslated}"]`);
 
                 wss.clients.forEach((client) => {
                     if (client !== ws && client.readyState === WebSocket.OPEN && client.room === ws.room) {
-                        client.send(msgStr);
+                        client.send(broadcastPacket);
                     }
                 });
             } catch (e) {
+                console.error("sign_broadcast processing error:", e);
                 wss.clients.forEach((client) => {
                     if (client !== ws && client.readyState === WebSocket.OPEN && client.room === ws.room) {
                         client.send(msgStr);
