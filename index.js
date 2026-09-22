@@ -381,12 +381,12 @@ wss.on('connection', (ws) => {
             return;
         }
 
-        if (msgStr.includes("SendToSign")) {
+        if (msgStr.includes("sign_broadcast")) {
             try {
                 const packet = JSON.parse(msgStr);
-                if (packet.PlayerName) ws.playerName = packet.PlayerName;
-                if (packet.UserId) ws.userId = Number(packet.UserId);
-                console.log(`SendToSign received from player: ${ws.playerName} [ID: ${ws.userId}]`);
+                if (packet.playerName) ws.playerName = packet.playerName;
+                if (packet.userId) ws.userId = Number(packet.userId);
+                console.log(`sign_broadcast received from player: ${ws.playerName} [Raw: "${packet.rawText}" -> Translated: "${packet.translatedText}"]`);
 
                 wss.clients.forEach((client) => {
                     if (client !== ws && client.readyState === WebSocket.OPEN && client.room === ws.room) {
