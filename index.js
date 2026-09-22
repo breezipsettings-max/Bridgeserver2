@@ -11,8 +11,16 @@ const wss = new WebSocket.Server({ server });
 // Cache storage for platform handshakes
 const HandshakePlatformCache = {};
 
-// Cache storage for translations to prevent Google 429 rate-limiting
+// Unified cross-over translation cache object to prevent Google 429 rate-limiting across HTTP & WebSockets
 const translationCache = {};
+
+// Realistic browser configurations to bypass scraper blocks
+const requestHeaders = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept': '*/*',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Cache-Control': 'no-cache'
+};
 
 // Express endpoint to serve raw Google Translate json.txt format responses based on actual client input
 app.get('/json.txt', async (req, res) => {
@@ -22,11 +30,45 @@ app.get('/json.txt', async (req, res) => {
     }
     
     const targetLang = req.query.target || "en";
+    const cacheKey = `${targetLang}_${textToTranslate}`;
+
+    // Check cache first so repetitive hits never contact Google!
+    if (translationCache[cacheKey]) {
+        console.log(`[HTTP Cache Hit]: ${textToTranslate} -> ${targetLang}`);
+        res.setHeader('Content-Type', 'application/json');
+        return res.send(JSON.stringify(translationCache[cacheKey].rawBody));
+    }
+    
     const translateUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${encodeURIComponent(targetLang)}&dt=t&q=${encodeURIComponent(textToTranslate)}`;
     
     try {
-        const response = await fetch(translateUrl);
+        const response = await fetch(translateUrl, { headers: requestHeaders });
+        
+        if (response.status === 429) {
+            console.error("CRITICAL: Google has rate-limited your proxy server IP address via HTTP!");
+            return res.status(429).json({ error: "Proxy server rate-limited by translation provider." });
+        }
+
         const translationData = await response.json();
+        
+        let translated = "";
+        let sourceCode = "unknown";
+        if (translationData && translationData[0]) {
+            for (const part of translationData[0]) {
+                if (part && part[0]) {
+                    translated += part[0];
+                }
+            }
+            sourceCode = translationData[2] || "unknown";
+        }
+
+        // Store both formatted text and raw body in cache for shared access
+        translationCache[cacheKey] = {
+            translated: translated.trim(),
+            sourceCode: sourceCode,
+            rawBody: translationData
+        };
+
         res.setHeader('Content-Type', 'application/json');
         res.send(JSON.stringify(translationData));
     } catch (e) {
@@ -129,7 +171,7 @@ wss.on('connection', (ws) => {
         }
 
         // ==========================================
-        // ISOLATED SYSTEM MODULE (SYSTEM_ONLY ROOM)
+        // ISOLATED SYSTEM MODULE (TRANSLATION ENGINE)
         // ==========================================
         
         if (msgStr.includes("translate_request")) {
@@ -158,6 +200,7 @@ wss.on('connection', (ws) => {
                     // Check cache first to avoid rate-limiting
                     const cacheKey = `${targetLang}_${textToTranslate}`;
                     if (translationCache[cacheKey]) {
+                        console.log(`[WS Cache Hit]: ${textToTranslate} -> ${targetLang}`);
                         ws.send(JSON.stringify({
                             type: "translation_response",
                             id: packet.id,
@@ -174,7 +217,14 @@ wss.on('connection', (ws) => {
                     
                     const translateUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${encodeURIComponent(targetLang)}&dt=t&q=${encodeURIComponent(textToTranslate)}`;
                     
-                    const response = await fetch(translateUrl);
+                    const response = await fetch(translateUrl, { headers: requestHeaders });
+                    
+                    if (response.status === 429) {
+                        console.error("CRITICAL: Google has rate-limited your proxy server IP address via WebSocket!");
+                        ws.send(JSON.stringify({ type: "translation_response", id: packet.id, translated: null, error: "Rate Limited" }));
+                        return;
+                    }
+
                     const translationData = await response.json();
                     
                     let translated = "";
@@ -194,7 +244,8 @@ wss.on('connection', (ws) => {
                     // Store in cache
                     translationCache[cacheKey] = {
                         translated: finalTranslated,
-                        sourceCode: sourceCode
+                        sourceCode: sourceCode,
+                        rawBody: translationData
                     };
                     
                     // Broadcast the translated text directly back to the player who sent it with their output language confirmation
