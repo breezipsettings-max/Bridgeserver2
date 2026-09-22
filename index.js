@@ -27,6 +27,19 @@ const requestHeaders = {
     'Cache-Control': 'no-cache'
 };
 
+// WebSocket ping/pong heartbeat interval to keep Render connections alive
+const interval = setInterval(() => {
+    wss.clients.forEach((client) => {
+        if (client.isAlive === false) return client.terminate();
+        client.isAlive = false;
+        client.ping();
+    });
+}, 30000);
+
+wss.on('close', () => {
+    clearInterval(interval);
+});
+
 // Express endpoint to serve raw Google Translate json.txt format responses based on actual client input
 app.get('/json.txt', async (req, res) => {
     const textToTranslate = req.query.text;
@@ -83,6 +96,11 @@ app.get('/json.txt', async (req, res) => {
 });
 
 wss.on('connection', (ws) => {
+    ws.isAlive = true;
+    ws.on('pong', () => {
+        ws.isAlive = true;
+    });
+
     // Default fallback room assignment
     ws.room = 'EN';
     
