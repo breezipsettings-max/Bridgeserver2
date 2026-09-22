@@ -5,6 +5,11 @@ const WebSocket = require('ws');
 const app = express();
 app.use(express.json());
 
+// Added root route so your browser check returns "Bridge Online" instead of Cannot GET /
+app.get('/', (req, res) => {
+    res.send('Bridge Online');
+});
+
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
