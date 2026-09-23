@@ -115,6 +115,19 @@ wss.on('connection', (ws) => {
             return;
         }
 
+        if (msgStr.includes("update_lang")) {
+            try {
+                const packet = JSON.parse(msgStr);
+                if (packet.target) {
+                    ws.outputLang = packet.target;
+                    console.log(`[Lang Sync] Player ${ws.playerName || "Unknown"} updated output lang to: [${ws.outputLang}]`);
+                }
+            } catch (e) {
+                console.error("update_lang error:", e);
+            }
+            return;
+        }
+
         if (msgStr.includes("translate_request")) {
             let packet;
             try {
@@ -189,6 +202,7 @@ wss.on('connection', (ws) => {
                 const packet = JSON.parse(msgStr);
                 if (packet.playerName) ws.playerName = packet.playerName;
                 if (packet.userId) ws.userId = Number(packet.userId);
+                if (packet.target) ws.outputLang = packet.target;
                 
                 const rawText = packet.rawText || "";
                 const targetLang = ws.outputLang || "en";
